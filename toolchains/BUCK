@@ -1,0 +1,24 @@
+load("@nix//:flake.bzl", "flake")
+load("@nix//toolchains:python.bzl", "nix_python_bootstrap_toolchain")
+
+_TARGET_MAPPING = [
+    select({k: k for k in ["config//os:linux", "config//os:macos"]}),
+    select({k: k for k in ["config//cpu:arm64", "config//cpu:x86_64"]}),
+]
+
+# Python toolchain from uv2nix virtualenv
+flake.package(
+    name = "python",
+    binary = "python",
+    package = "default",
+    path = ".",  # flake.nix is in the same directory
+    target_compatible_with = _TARGET_MAPPING,
+)
+
+
+
+nix_python_bootstrap_toolchain(
+    name = "python_bootstrap",
+    python = ":python",
+    visibility = ["PUBLIC"],
+)
