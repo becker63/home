@@ -1,0 +1,755 @@
+This file is a merged representation of the entire codebase, combined into a single document by Repomix.
+
+<file_summary>
+This section contains a summary of this file.
+
+<purpose>
+This file contains a packed representation of the entire repository's contents.
+It is designed to be easily consumable by AI systems for analysis, code review,
+or other automated processes.
+</purpose>
+
+<file_format>
+The content is organized as follows:
+1. This summary section
+2. Repository information
+3. Directory structure
+4. Repository files (if enabled)
+5. Multiple file entries, each consisting of:
+  - File path as an attribute
+  - Full contents of the file
+</file_format>
+
+<usage_guidelines>
+- This file should be treated as read-only. Any changes should be made to the
+  original repository files, not this packed version.
+- When processing this file, use the file path to distinguish
+  between different files in the repository.
+- Be aware that this file may contain sensitive information. Handle it with
+  the same level of security as you would the original repository.
+</usage_guidelines>
+
+<notes>
+- Some files may have been excluded based on .gitignore rules and Repomix's configuration
+- Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
+- Files matching patterns in .gitignore are excluded
+- Files matching default ignore patterns are excluded
+- Files are sorted by Git change count (files with more changes are at the bottom)
+</notes>
+
+</file_summary>
+
+<directory_structure>
+.cloudcoil_override/
+  cloudcoil/
+    codegen/
+      templates/
+        pydantic_v2/
+          ConfigDict.jinja2
+generated/
+  crds/
+    cert-manager/
+      Kptfile
+      README.md
+    fluxcd-source/
+      Kptfile
+    BUCK
+src/
+  codegen/
+    python/
+      BUCK
+      main.py
+      python_codegen_rule.bzl
+  lib/
+    BUCK
+    main.py
+tests/
+  BUCK
+  conftest.py
+  run_pytest.py
+  test_basic.py
+toolchains/
+  python/
+    .gitignore
+    .python-version
+    pyproject.toml
+  BUCK
+  flake.lock
+  flake.nix
+.buckconfig
+.gitignore
+flake.nix
+notes
+pytest.ini
+</directory_structure>
+
+<files>
+This section contains the contents of the repository's files.
+
+<file path=".cloudcoil_override/cloudcoil/codegen/templates/pydantic_v2/ConfigDict.jinja2">
+{% if extra_fields %}
+model_config = ConfigDict(extra="{{ extra_fields }}")
+{% endif %}
+</file>
+
+<file path="generated/crds/cert-manager/Kptfile">
+apiVersion: kpt.dev/v1
+kind: Kptfile
+metadata:
+  name: cert-manager
+upstream:
+  type: git
+  git:
+    repo: https://github.com/cert-manager/cert-manager
+    directory: /deploy/crds
+    ref: master
+  updateStrategy: resource-merge
+upstreamLock:
+  type: git
+  git:
+    repo: https://github.com/cert-manager/cert-manager
+    directory: /deploy/crds
+    ref: master
+    commit: 227989f2eb6dac9892695d63d5b90e307d2f2c8b
+</file>
+
+<file path="generated/crds/cert-manager/README.md">
+# CRDs source directory
+
+> **WARNING**: if you are an end-user, you probably should NOT need to use the
+> files in this directory. These files are for **reference, development and testing purposes only**.
+
+This directory contains 'source code' used to build our CustomResourceDefinition
+resources consumed by our officially supported deployment methods (e.g. the Helm chart).
+The CRDs in this directory might be incomplete, and should **NOT** be used to provision the operator.
+</file>
+
+<file path="generated/crds/fluxcd-source/Kptfile">
+apiVersion: kpt.dev/v1
+kind: Kptfile
+metadata:
+  name: fluxcd-source
+upstream:
+  type: git
+  git:
+    repo: https://github.com/fluxcd/source-controller
+    directory: /config/crd/bases
+    ref: main
+  updateStrategy: resource-merge
+upstreamLock:
+  type: git
+  git:
+    repo: https://github.com/fluxcd/source-controller
+    directory: /config/crd/bases
+    ref: main
+    commit: eae8f25c2b44defd83765b764cb680aa07fdc640
+</file>
+
+<file path="generated/crds/BUCK">
+load("//src/codegen/python:python_codegen_rule.bzl", "python_codegen")
+
+namespace = "generated.models"
+
+YAML_SRCS = glob(["**/*.yaml", "**/*.yml"])
+
+python_codegen(
+    name = "generate_python_models",
+    srcs = YAML_SRCS,
+    namespace = namespace,
+)
+
+python_library(
+    name = "models",
+    deps = [":generate_python_models"],
+    visibility = ["PUBLIC"],
+)
+</file>
+
+<file path="src/codegen/python/BUCK">
+python_bootstrap_binary(
+    name = "codegen",
+    main = "main.py",
+    visibility = ["PUBLIC"],
+)
+
+filegroup(
+    name = "configdict_override",
+    srcs = ["ConfigDict.jinja2"],
+    visibility = ["PUBLIC"],  # ensure rule in generated/crds can see it
+)
+</file>
+
+<file path="src/codegen/python/main.py">
+import logging
+import re
+import shutil
+from importlib.resources import files
+from pathlib import Path
+from typing import List
+
+import typer
+from cloudcoil.codegen.generator import ModelConfig, Transformation, generate
+
+app = typer.Typer()
+
+
+def setup_logging():
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(levelname)s - %(message)s",
+    )
+
+
+def build_model_config(
+    namespace: str, inputs: List[str], output_dir: Path
+) -> ModelConfig:
+    return ModelConfig(
+        namespace=namespace,
+        input_=inputs,
+        output=output_dir,
+        mode="resource",
+        log_level="INFO",
+        transformations=[
+            Transformation(
+                match_=re.compile(
+                    r"^io\.k8s\.apimachinery\.pkg\.apis\.meta\.v1\.ObjectMeta$"
+                ),
+                replace="apimachinery.ObjectMeta",
+                namespace="cloudcoil",
+            )
+        ],
+        additional_datamodel_codegen_args=["--extra-fields", "allow"],
+        generate_init=True,
+        generate_py_typed=True,
+    )
+
+
+def clean_output_dir(output: Path, clean: bool):
+    if clean and output.exists():
+        shutil.rmtree(output)
+    output.mkdir(parents=True, exist_ok=True)
+
+
+@app.command()
+def main(
+    namespace: str = typer.Argument(..., help="Python namespace for generated models"),
+    input: List[str] = typer.Option(
+        ..., "--input", "-i", help="Schema / CRD / OpenAPI files or URLs"
+    ),
+    output: Path = typer.Option(..., "--output", "-o", help="Output directory"),
+    clean: bool = typer.Option(
+        False, "--clean", help="Destroy output directory before generating"
+    ),
+):
+    """Deterministic CloudCoil model generator."""
+    setup_logging()
+    clean_output_dir(output, clean)
+
+    logging.info(f"Generating models into namespace: {namespace}")
+
+    config = build_model_config(namespace, input, output)
+
+    try:
+        generate(config)
+    except Exception as e:
+        logging.error(f"Generation failed: {e}")
+        raise SystemExit(1)
+
+    logging.info("Generation complete.")
+
+
+if __name__ == "__main__":
+    app()
+</file>
+
+<file path="src/codegen/python/python_codegen_rule.bzl">
+def _python_codegen_impl(ctx):
+    out = ctx.actions.declare_output("generated_models", dir=True)
+
+    codegen = ctx.attrs._codegen[RunInfo]
+    ruff = ctx.attrs._ruff[RunInfo]
+
+    args = cmd_args()
+    args.add(ctx.attrs.namespace)
+
+    for f in ctx.attrs.srcs:
+        args.add("--input", f)
+
+    args.add("--output", out.as_output())
+    args.add("--clean")
+
+    shell_cmd = cmd_args(
+        [
+            "bash",
+            "-e",
+            "-c",
+            cmd_args(
+                [
+                    # prepend ruff and call codegen
+                    "PATH=$(dirname ",
+                    cmd_args(ruff, format="{}"),
+                    "):$PATH;",
+                    codegen,
+                    args,
+                ],
+                delimiter=" "
+            ),
+        ]
+    )
+
+    ctx.actions.run(
+        shell_cmd,
+        category="python_codegen"
+    )
+
+    return [DefaultInfo(default_outputs=[out])]
+
+
+python_codegen = rule(
+    impl = _python_codegen_impl,
+    attrs = {
+        "srcs": attrs.list(attrs.source(), default=[]),
+        "namespace": attrs.string(),
+        "_codegen": attrs.exec_dep(default="//src/codegen/python:codegen"),
+        "_ruff": attrs.exec_dep(default="toolchains//:ruff"),
+    },
+)
+</file>
+
+<file path="src/lib/BUCK">
+python_bootstrap_binary(
+    name = "test",
+    main = "main.py"
+)
+</file>
+
+<file path="src/lib/main.py">
+from cloudcoil.codegen.generator import ModelConfig, Transformation, generate
+
+print("this module imports generator")
+</file>
+
+<file path="tests/BUCK">
+python_bootstrap_binary(
+    name = "test",
+    main = "run_pytest.py",
+)
+</file>
+
+<file path="tests/conftest.py">
+import pytest
+
+
+@pytest.fixture
+def dummy():
+    return "hello from fixture"
+</file>
+
+<file path="tests/run_pytest.py">
+import sys
+
+import pytest
+
+if __name__ == "__main__":
+    raise SystemExit(pytest.main(sys.argv[1:]))
+</file>
+
+<file path="tests/test_basic.py">
+def test_basic(dummy):
+    assert dummy == "hello from fixture"
+</file>
+
+<file path="toolchains/flake.lock">
+{
+  "nodes": {
+    "buck2-nix": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1756462063,
+        "narHash": "sha256-FIGJSsPLYmQCVU620vD6t2uVg84G2YEWQzahJO00kVY=",
+        "owner": "tweag",
+        "repo": "buck2.nix",
+        "rev": "038b031b84846101030b9d081445003e82e3be5c",
+        "type": "github"
+      },
+      "original": {
+        "owner": "tweag",
+        "repo": "buck2.nix",
+        "type": "github"
+      }
+    },
+    "nixpkgs": {
+      "locked": {
+        "lastModified": 1764950072,
+        "narHash": "sha256-BmPWzogsG2GsXZtlT+MTcAWeDK5hkbGRZTeZNW42fwA=",
+        "owner": "nixos",
+        "repo": "nixpkgs",
+        "rev": "f61125a668a320878494449750330ca58b78c557",
+        "type": "github"
+      },
+      "original": {
+        "owner": "nixos",
+        "ref": "nixos-unstable",
+        "repo": "nixpkgs",
+        "type": "github"
+      }
+    },
+    "pyproject-build-systems": {
+      "inputs": {
+        "nixpkgs": [
+          "nixpkgs"
+        ],
+        "pyproject-nix": [
+          "pyproject-nix"
+        ],
+        "uv2nix": [
+          "uv2nix"
+        ]
+      },
+      "locked": {
+        "lastModified": 1763662255,
+        "narHash": "sha256-4bocaOyLa3AfiS8KrWjZQYu+IAta05u3gYZzZ6zXbT0=",
+        "owner": "pyproject-nix",
+        "repo": "build-system-pkgs",
+        "rev": "042904167604c681a090c07eb6967b4dd4dae88c",
+        "type": "github"
+      },
+      "original": {
+        "owner": "pyproject-nix",
+        "repo": "build-system-pkgs",
+        "type": "github"
+      }
+    },
+    "pyproject-nix": {
+      "inputs": {
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1764134915,
+        "narHash": "sha256-xaKvtPx6YAnA3HQVp5LwyYG1MaN4LLehpQI8xEdBvBY=",
+        "owner": "pyproject-nix",
+        "repo": "pyproject.nix",
+        "rev": "2c8df1383b32e5443c921f61224b198a2282a657",
+        "type": "github"
+      },
+      "original": {
+        "owner": "pyproject-nix",
+        "repo": "pyproject.nix",
+        "type": "github"
+      }
+    },
+    "root": {
+      "inputs": {
+        "buck2-nix": "buck2-nix",
+        "nixpkgs": "nixpkgs",
+        "pyproject-build-systems": "pyproject-build-systems",
+        "pyproject-nix": "pyproject-nix",
+        "uv2nix": "uv2nix"
+      }
+    },
+    "uv2nix": {
+      "inputs": {
+        "nixpkgs": [
+          "nixpkgs"
+        ],
+        "pyproject-nix": [
+          "pyproject-nix"
+        ]
+      },
+      "locked": {
+        "lastModified": 1764992234,
+        "narHash": "sha256-qBbyM1Gnvs/ncbnWfbBboMyevelz+owIdSN5Sg89wzw=",
+        "owner": "pyproject-nix",
+        "repo": "uv2nix",
+        "rev": "1610e554e579c3d47b47c8a32d47042116d0e153",
+        "type": "github"
+      },
+      "original": {
+        "owner": "pyproject-nix",
+        "repo": "uv2nix",
+        "type": "github"
+      }
+    }
+  },
+  "root": "root",
+  "version": 7
+}
+</file>
+
+<file path="toolchains/flake.nix">
+{
+  description = "Buck2 + uv2nix project";
+
+  inputs = {
+    nixpkgs.url = "github:nixos/nixpkgs?ref=nixos-unstable";
+    buck2-nix = {
+      url = "github:tweag/buck2.nix";
+      flake = false;
+    };
+    pyproject-nix = {
+      url = "github:pyproject-nix/pyproject.nix";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+    uv2nix = {
+      url = "github:pyproject-nix/uv2nix";
+      inputs.pyproject-nix.follows = "pyproject-nix";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+    pyproject-build-systems = {
+      url = "github:pyproject-nix/build-system-pkgs";
+      inputs.pyproject-nix.follows = "pyproject-nix";
+      inputs.uv2nix.follows = "uv2nix";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+  };
+
+  outputs =
+    {
+      nixpkgs,
+      buck2-nix,
+      pyproject-nix,
+      uv2nix,
+      pyproject-build-systems,
+      ...
+    }:
+    let
+      inherit (nixpkgs) lib;
+      forAllSystems = lib.genAttrs lib.systems.flakeExposed;
+
+      # Load workspace from toolchains/
+      workspace = uv2nix.lib.workspace.loadWorkspace { workspaceRoot = ./python; };
+
+      overlay = workspace.mkPyprojectOverlay {
+        sourcePreference = "wheel";
+      };
+
+      editableOverlay = workspace.mkEditablePyprojectOverlay {
+        root = "$REPO_ROOT";
+      };
+
+      pythonSets = forAllSystems (
+        system:
+        let
+          pkgs = nixpkgs.legacyPackages.${system};
+          python = pkgs.python3;
+        in
+        (pkgs.callPackage pyproject-nix.build.packages {
+          inherit python;
+        }).overrideScope
+          (
+            lib.composeManyExtensions [
+              pyproject-build-systems.overlays.wheel
+              overlay
+            ]
+          )
+      );
+
+    in
+    {
+      devShells = forAllSystems (
+        system:
+        let
+          pkgs = nixpkgs.legacyPackages.${system};
+          pythonSet = pythonSets.${system}.overrideScope editableOverlay;
+          virtualenv = pythonSet.mkVirtualEnv "home" workspace.deps.all;
+        in
+        {
+          default = pkgs.mkShell {
+            packages = [
+              virtualenv
+              pkgs.uv
+              pkgs.buck2
+              pkgs.repomix
+              pkgs.kpt
+            ];
+            env = {
+              UV_NO_SYNC = "1";
+              UV_PYTHON = pythonSet.python.interpreter;
+              UV_PYTHON_DOWNLOADS = "never";
+            };
+            shellHook = ''
+              unset PYTHONPATH
+              export REPO_ROOT=$(git rev-parse --show-toplevel)
+
+              mkdir -p .buckconfig.d
+              cat > .buckconfig.d/buck2-nix.config <<'EOS'
+              [external_cell_nix]
+                git_origin = https://github.com/tweag/buck2.nix.git
+                commit_hash = ${buck2-nix.rev}
+              EOS
+            '';
+          };
+        }
+      );
+
+      packages = forAllSystems (
+        system:
+        let
+          pkgs = nixpkgs.legacyPackages.${system};
+        in
+        {
+          default = pythonSets.${system}.mkVirtualEnv "env" workspace.deps.default;
+
+          # cloudcoil generation implicitly relys on this.. stupid
+          ruff = pkgs.ruff;
+        }
+      );
+
+    };
+}
+</file>
+
+<file path="notes">
+alright buster. Cloudcoils shit design is kicking your ass again. Cloudcoil inside
+
+https://github.com/cloudcoil/cloudcoil/blob/main/cloudcoil/codegen/templates/pydantic_v2/BaseModel.jinja2
+
+imports ConfigDict.jinja2.. which isnt even commited to its source
+
+thats why you were generating it earlier, not just because you wanted extra fields
+because its required in order for the generator to run.. and there are no examples
+in cloudcoils source of even using this file.. cooooooool. What an ass lib.
+
+buck2 and nix (nixes uv2nix venv) is readonly so we cant just do this 
+
+tmpl_dir = Path(str(files("cloudcoil.codegen"))) / "templates" / "pydantic_v2"
+
+as we did in the old one. And write the jinja to it. 
+
+
+Your gonna need to experiment with gpt to figure out how to address that. Night bro.
+</file>
+
+<file path="pytest.ini">
+[pytest]
+addopts = --ignore=idlelib
+testpaths = tests
+</file>
+
+<file path="toolchains/python/.gitignore">
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+</file>
+
+<file path="toolchains/python/.python-version">
+3.14
+</file>
+
+<file path="toolchains/python/pyproject.toml">
+[project]
+name = "myproject"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "cloudcoil",
+    "datamodel-code-generator>=0.42.2",
+    "filelock>=3.20.0",
+    "pytest>=9.0.2",
+    "typer>=0.20.0",
+]  # shared deps for both entrypoints
+</file>
+
+<file path="toolchains/BUCK">
+load("@nix//:flake.bzl", "flake")
+load("@nix//toolchains:python.bzl", "nix_python_bootstrap_toolchain")
+
+_TARGET_MAPPING = [
+    select({k: k for k in ["config//os:linux", "config//os:macos"]}),
+    select({k: k for k in ["config//cpu:arm64", "config//cpu:x86_64"]}),
+]
+
+flake.package(
+    name = "python",
+    binary = "python",
+    package = "default",
+    path = ".",
+    target_compatible_with = _TARGET_MAPPING,
+)
+
+nix_python_bootstrap_toolchain(
+    name = "python_bootstrap",
+    python = ":python",
+    visibility = ["PUBLIC"],
+)
+
+
+flake.package(
+    name = "ruff",
+    path = ".",
+    package = "ruff",
+    binary = "ruff",
+    visibility = ["PUBLIC"],
+)
+</file>
+
+<file path=".buckconfig">
+[cells]
+  root = .
+  prelude = prelude
+  toolchains = toolchains
+  hsconfig = config
+  none = none
+  nix = none
+
+[cell_aliases]
+  config = prelude
+  ovr_config = prelude
+  fbcode = none
+  fbsource = none
+  fbcode_macros = none
+  buck = none
+
+[external_cells]
+  prelude = bundled
+  nix = git
+
+[parser]
+  target_platform_detector_spec = target:root//...->prelude//platforms:default
+
+[project]
+  ignore = .git, tmp
+
+[buck2]
+  materializations = deferred
+</file>
+
+<file path=".gitignore">
+/buck-out
+/.buckconfig.local
+/.buckconfig.d/buck2-nix.config
+/.envrc.private
+/.direnv
+/flake.lock
+/.pytest_cache
+__pycache__
+generated/crds/**/*.yaml
+</file>
+
+<file path="flake.nix">
+{
+  description = "Buck2 + uv2nix project";
+
+  inputs = {
+    toolchains.url = "path:./toolchains";
+  };
+
+  outputs =
+    { toolchains, ... }:
+    {
+      devShells = toolchains.outputs.devShells;
+      packages = toolchains.outputs.packages;
+    };
+}
+</file>
+
+</files>

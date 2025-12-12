@@ -4,3 +4,6 @@
 /.envrc.private
 /.direnv
 /flake.lock
+/.pytest_cache
+__pycache__
+generated/crds/**/*.yaml

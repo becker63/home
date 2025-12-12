@@ -6,19 +6,25 @@ _TARGET_MAPPING = [
     select({k: k for k in ["config//cpu:arm64", "config//cpu:x86_64"]}),
 ]
 
-# Python toolchain from uv2nix virtualenv
 flake.package(
     name = "python",
     binary = "python",
     package = "default",
-    path = ".",  # flake.nix is in the same directory
+    path = ".",
     target_compatible_with = _TARGET_MAPPING,
 )
-
-
 
 nix_python_bootstrap_toolchain(
     name = "python_bootstrap",
     python = ":python",
+    visibility = ["PUBLIC"],
+)
+
+
+flake.package(
+    name = "ruff",
+    path = ".",
+    package = "ruff",
+    binary = "ruff",
     visibility = ["PUBLIC"],
 )

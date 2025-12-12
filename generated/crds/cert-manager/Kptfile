@@ -1,0 +1,18 @@
+apiVersion: kpt.dev/v1
+kind: Kptfile
+metadata:
+  name: cert-manager
+upstream:
+  type: git
+  git:
+    repo: https://github.com/cert-manager/cert-manager
+    directory: /deploy/crds
+    ref: master
+  updateStrategy: resource-merge
+upstreamLock:
+  type: git
+  git:
+    repo: https://github.com/cert-manager/cert-manager
+    directory: /deploy/crds
+    ref: master
+    commit: 227989f2eb6dac9892695d63d5b90e307d2f2c8b

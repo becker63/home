@@ -1,0 +1,17 @@
+load("//src/codegen/python:python_codegen_rule.bzl", "python_codegen")
+
+namespace = "generated.models"
+
+YAML_SRCS = glob(["**/*.yaml", "**/*.yml"])
+
+python_codegen(
+    name = "generate_python_models",
+    srcs = YAML_SRCS,
+    namespace = namespace,
+)
+
+python_library(
+    name = "models",
+    deps = [":generate_python_models"],
+    visibility = ["PUBLIC"],
+)
