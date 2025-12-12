@@ -98,6 +98,8 @@
                 git_origin = https://github.com/tweag/buck2.nix.git
                 commit_hash = ${buck2-nix.rev}
               EOS
+
+              buck2 build root//generated/crds:generated_srcs --out tests/generated
             '';
           };
         }
