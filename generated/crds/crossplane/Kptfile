@@ -1,0 +1,18 @@
+apiVersion: kpt.dev/v1
+kind: Kptfile
+metadata:
+  name: crossplane
+upstream:
+  type: git
+  git:
+    repo: https://github.com/crossplane/crossplane
+    directory: /cluster/crds
+    ref: main
+  updateStrategy: resource-merge
+upstreamLock:
+  type: git
+  git:
+    repo: https://github.com/crossplane/crossplane
+    directory: /cluster/crds
+    ref: main
+    commit: f8545480c9486628b65457292808d4f84ff2dcda

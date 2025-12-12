@@ -1,17 +1,16 @@
 load("//src/codegen/python:python_codegen_rule.bzl", "python_codegen")
+load("//generated/crds:crd_codegen_groups.bzl", "crd_codegen_from_tree")
 
-namespace = "generated.models"
+ALL_CRDS = glob(["**/*.yaml", "**/*.yml"])
 
-YAML_SRCS = glob(["**/*.yaml", "**/*.yml"])
-
-python_codegen(
-    name = "generate_python_models",
-    srcs = YAML_SRCS,
-    namespace = namespace,
+GENERATORS = crd_codegen_from_tree(
+    name_prefix = "gen",
+    srcs = ALL_CRDS,
+    namespace_prefix = "generated.models",
 )
 
-python_library(
-    name = "models",
-    deps = [":generate_python_models"],
+filegroup(
+    name = "generated_srcs",
+    srcs = GENERATORS,
     visibility = ["PUBLIC"],
 )

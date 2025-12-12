@@ -56,10 +56,6 @@ def main(
 ):
     clean_output_dir(output, clean)
 
-    print(TEMPLATE_DIR)
-    for f in Path(TEMPLATE_DIR).rglob("*"):
-        print(f.name)
-
     config = build_model_config(namespace, input, output)
     try:
         generate(config)
