@@ -28,3 +28,11 @@ flake.package(
     binary = "ruff",
     visibility = ["PUBLIC"],
 )
+
+flake.package(
+    name = "kcl",
+    path = ".",
+    package = "kcl",
+    binary = "kcl",
+    visibility = ["PUBLIC"],
+)

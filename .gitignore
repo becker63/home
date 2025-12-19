@@ -6,5 +6,5 @@
 /flake.lock
 /.pytest_cache
 __pycache__
-generated/crds/**/*.yaml
-tests/generated
+#generated/crds/**/*.yaml
+#tests/generated
