@@ -1,4 +1,4 @@
-load("//src/codegen/python:python_codegen_rule.bzl", "python_codegen")
+load("//src/codegen/cloudcoil:python_codegen_rule.bzl", "python_codegen")
 
 def crd_codegen_from_tree(
     *,

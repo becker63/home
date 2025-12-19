@@ -38,7 +38,7 @@
       forAllSystems = lib.genAttrs lib.systems.flakeExposed;
 
       # Load workspace from toolchains/
-      workspace = uv2nix.lib.workspace.loadWorkspace { workspaceRoot = ./python; };
+      workspace = uv2nix.lib.workspace.loadWorkspace { workspaceRoot = ./venv; };
 
       overlay = workspace.mkPyprojectOverlay {
         sourcePreference = "wheel";
@@ -99,7 +99,7 @@
                 commit_hash = ${buck2-nix.rev}
               EOS
 
-              buck2 build root//generated/crds:generated_srcs --out tests/generated
+              buck2 build root//schemas/crds:generated_srcs --out tests/generated
             '';
           };
         }
