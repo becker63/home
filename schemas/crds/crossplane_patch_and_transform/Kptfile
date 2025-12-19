@@ -1,0 +1,18 @@
+apiVersion: kpt.dev/v1
+kind: Kptfile
+metadata:
+  name: crossplane_patch_and_transform
+upstream:
+  type: git
+  git:
+    repo: https://github.com/crossplane-contrib/function-patch-and-transform
+    directory: /package/input
+    ref: main
+  updateStrategy: resource-merge
+upstreamLock:
+  type: git
+  git:
+    repo: https://github.com/crossplane-contrib/function-patch-and-transform
+    directory: /package/input
+    ref: main
+    commit: 1ae3d43bf4c7f25156dea00c30dd10f092ef31f7

@@ -1,0 +1,18 @@
+apiVersion: kpt.dev/v1
+kind: Kptfile
+metadata:
+  name: crossplane_sequencer
+upstream:
+  type: git
+  git:
+    repo: https://github.com/crossplane-contrib/function-sequencer
+    directory: /package/input
+    ref: main
+  updateStrategy: resource-merge
+upstreamLock:
+  type: git
+  git:
+    repo: https://github.com/crossplane-contrib/function-sequencer
+    directory: /package/input
+    ref: main
+    commit: 4bf5435169fe32ab33086979d0442525b294ee40

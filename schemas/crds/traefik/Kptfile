@@ -1,0 +1,18 @@
+apiVersion: kpt.dev/v1
+kind: Kptfile
+metadata:
+  name: traefik
+upstream:
+  type: git
+  git:
+    repo: https://github.com/traefik/traefik
+    directory: /docs/content/reference/dynamic-configuration
+    ref: master
+  updateStrategy: resource-merge
+upstreamLock:
+  type: git
+  git:
+    repo: https://github.com/traefik/traefik
+    directory: /docs/content/reference/dynamic-configuration
+    ref: master
+    commit: 78e2dab1559b8465db81798a2c6a92aeb41ee691

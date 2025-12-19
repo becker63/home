@@ -103,6 +103,7 @@
               EOS
 
               buck2 build root//schemas/crds:generated_srcs --out tests/generated
+              buck2
             '';
           };
         }
@@ -124,6 +125,8 @@
 
           # cloudcoil generation implicitly relies on this
           ruff = pkgs.ruff;
+
+          kcl = pkgs.kcl;
         }
       );
     };

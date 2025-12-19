@@ -1,0 +1,57 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata: # kpt-merge: /traefik-controller
+  name: traefik-controller
+  annotations:
+    internal.kpt.dev/upstream-identifier: '|ServiceAccount|default|traefik-controller'
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: # kpt-merge: /traefik
+  name: traefik
+  annotations:
+    internal.kpt.dev/upstream-identifier: 'apps|Deployment|default|traefik'
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: traefik-lb
+  template:
+    metadata:
+      labels:
+        app: traefik-lb
+    spec:
+      serviceAccountName: traefik-controller
+      containers:
+        - name: traefik
+          image: traefik:v3.6
+          args:
+            - --entryPoints.web.address=:80
+            - --entryPoints.websecure.address=:443
+            - --experimental.kubernetesgateway
+            - --providers.kubernetesgateway
+          ports:
+            - name: web
+              containerPort: 80
+            - name: websecure
+              containerPort: 443
+---
+apiVersion: v1
+kind: Service
+metadata: # kpt-merge: /traefik
+  name: traefik
+  annotations:
+    internal.kpt.dev/upstream-identifier: '|Service|default|traefik'
+spec:
+  type: LoadBalancer
+  selector:
+    app: traefik-lb
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: web
+      name: web
+    - protocol: TCP
+      port: 443
+      targetPort: websecure
+      name: websecure

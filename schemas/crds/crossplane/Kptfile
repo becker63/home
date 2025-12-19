@@ -15,4 +15,4 @@ upstreamLock:
     repo: https://github.com/crossplane/crossplane
     directory: /cluster/crds
     ref: main
-    commit: f8545480c9486628b65457292808d4f84ff2dcda
+    commit: 88ef2c87716f038e16cd4e3d5be3b06e95143ffb

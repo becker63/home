@@ -1,7 +1,23 @@
 load("//schemas/crds:crd_codegen_groups.bzl", "crd_codegen_from_tree")
 load("//schemas/crds:kcl_codegen_groups.bzl", "kcl_codegen_from_tree")
 
-ALL_CRDS = glob(["**/*.yaml", "**/*.yml"])
+ALL_CRDS = glob(
+    [
+        "**/*.yaml",
+        "**/*.yml",
+    ],
+    exclude = [
+        "**/README.*",
+        "**/*.md",
+        "**/rbac*.yml",
+        "**/*example*",
+        "**/*whoami*",
+        "**/*gateway*",
+        "**/docker-labels*",
+        "**/file.*",
+    ],
+)
+
 
 PYTHON_GENERATORS = crd_codegen_from_tree(
     name_prefix = "gen",

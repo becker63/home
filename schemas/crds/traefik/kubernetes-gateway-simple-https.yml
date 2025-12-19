@@ -1,0 +1,47 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: GatewayClass
+metadata: # kpt-merge: /my-gateway-class
+  name: my-gateway-class
+  annotations:
+    internal.kpt.dev/upstream-identifier: 'gateway.networking.k8s.io|GatewayClass|default|my-gateway-class'
+spec:
+  controllerName: traefik.io/gateway-controller
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata: # kpt-merge: /my-gateway
+  name: my-gateway
+  annotations:
+    internal.kpt.dev/upstream-identifier: 'gateway.networking.k8s.io|Gateway|default|my-gateway'
+spec:
+  gatewayClassName: my-gateway-class
+  listeners:
+    - name: https
+      protocol: HTTPS
+      port: 443
+      tls:
+        certificateRefs:
+          - kind: Secret
+            name: mysecret
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata: # kpt-merge: default/http-app
+  name: http-app
+  namespace: default
+  annotations:
+    internal.kpt.dev/upstream-identifier: 'gateway.networking.k8s.io|HTTPRoute|default|http-app'
+spec:
+  parentRefs:
+    - name: my-gateway
+  hostnames:
+    - whoami
+  rules:
+    - matches:
+        - path:
+            type: Exact
+            value: /foo
+      backendRefs:
+        - name: whoami
+          port: 80
+          weight: 1
