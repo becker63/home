@@ -3,7 +3,6 @@
 /.buckconfig.d
 /.envrc.private
 /.direnv
-/flake.lock
 /.pytest_cache
 __pycache__
 .ruff_cache
