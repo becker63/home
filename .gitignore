@@ -1,10 +1,11 @@
 /buck-out
 /.buckconfig.local
-/.buckconfig.d/buck2-nix.config
+/.buckconfig.d
 /.envrc.private
 /.direnv
 /flake.lock
 /.pytest_cache
 __pycache__
+.ruff_cache
 #generated/crds/**/*.yaml
 #tests/generated

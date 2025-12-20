@@ -875,7 +875,7 @@ schema PtFnCrossplaneIoV1beta1ResourcesResourcesItems0:
 
     patches?: [PtFnCrossplaneIoV1beta1ResourcesResourcesItems0PatchesItems0]
 
-    readinessChecks?: [PtFnCrossplaneIoV1beta1ResourcesResourcesItems0ReadinessChecksItems0] = [{"matchCondition": {"type": "Ready", "status": "True"}, "type": "MatchCondition"}]
+    readinessChecks?: [PtFnCrossplaneIoV1beta1ResourcesResourcesItems0ReadinessChecksItems0] = [{"matchCondition": {"status": "True", "type": "Ready"}, "type": "MatchCondition"}]
 
 
 schema PtFnCrossplaneIoV1beta1ResourcesResourcesItems0ConnectionDetailsItems0:

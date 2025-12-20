@@ -102,8 +102,13 @@
                 commit_hash = ${buck2-nix.rev}
               EOS
 
-              buck2 build root//schemas/crds:generated_srcs --out tests/generated
-              buck2
+              echo building python
+              buck2 build root//schemas/crds:generated_python --out tests/generated
+
+              echo building kcl
+              buck2 build root//schemas/crds:generated_kcl --out schemas/kcl
+
+              xonsh
             '';
           };
         }
