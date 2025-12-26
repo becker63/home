@@ -7,14 +7,6 @@
 __pycache__
 .ruff_cache
 
-# Ignore everything under schemas
-schemas/**
-
-# Re-allow the directory itself
-!schemas/crds
-
-# Re-allow only the BUCK file
-!schemas/crds/BUCK
-
-# tests/generated
+# Generated sources are reproducible via hermetic tooling and intentionally not checked in
+schemas/kcl
 tests/generated
