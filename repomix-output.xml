@@ -1,0 +1,2292 @@
+This file is a merged representation of the entire codebase, combined into a single document by Repomix.
+
+<file_summary>
+This section contains a summary of this file.
+
+<purpose>
+This file contains a packed representation of the entire repository's contents.
+It is designed to be easily consumable by AI systems for analysis, code review,
+or other automated processes.
+</purpose>
+
+<file_format>
+The content is organized as follows:
+1. This summary section
+2. Repository information
+3. Directory structure
+4. Repository files (if enabled)
+5. Multiple file entries, each consisting of:
+  - File path as an attribute
+  - Full contents of the file
+</file_format>
+
+<usage_guidelines>
+- This file should be treated as read-only. Any changes should be made to the
+  original repository files, not this packed version.
+- When processing this file, use the file path to distinguish
+  between different files in the repository.
+- Be aware that this file may contain sensitive information. Handle it with
+  the same level of security as you would the original repository.
+</usage_guidelines>
+
+<notes>
+- Some files may have been excluded based on .gitignore rules and Repomix's configuration
+- Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
+- Files matching patterns in .gitignore are excluded
+- Files matching default ignore patterns are excluded
+- Files are sorted by Git change count (files with more changes are at the bottom)
+</notes>
+
+</file_summary>
+
+<directory_structure>
+configurations/
+  common/
+    kclrun_helpers.k
+    prefilled_infisical_secret.k
+  control_plane/
+    digitalocean_config/
+      nixos_frps_composition/
+        functions/
+          dns.k
+          droplet.k
+          image.k
+        composition.k
+      provider_config.k
+      vars.k
+    ingress/
+      FRPC_Config.k
+lib/
+  lib.py
+rules/
+  groups/
+    crd_codegen_groups.bzl
+    frp_codegen_groups.bzl
+    kcl_codegen_groups.bzl
+  crd-to-cloudcoil.bzl
+  crd-to-kcl.bzl
+  go-schema-kcl.bzl
+schemas/
+  crds/
+    BUCK
+tests/
+  tests/
+    test_basic.py
+  BUCK
+  conftest.py
+  run_pytest.py
+toolchains/
+  codegen_scripts/
+    go-schema-kcl/
+      go.mod
+      gomod2nix.toml
+      main.go
+    python-crd-cloudcoil/
+      templates/
+        BaseModel.jinja2
+        ConfigDict.jinja2
+        RootModel.jinja2
+      main.py
+  BUCK
+  flake.lock
+  flake.nix
+  gomod2nix.nix
+  uv2nix.nix
+.buckconfig
+.gitignore
+flake.lock
+flake.nix
+kcl.mod
+kcl.mod.lock
+pytest.ini
+</directory_structure>
+
+<files>
+This section contains the contents of the repository's files.
+
+<file path="configurations/common/kclrun_helpers.k">
+import regex
+
+# True if not Undefined
+is_defined = lambda v -> bool {
+    v != Undefined
+}
+
+# Safe dot-path getter for dicts only.
+get = lambda x: any, path: str, d: any -> any {
+    p = regex.split(path, "\.")
+    c = p[0]
+    rest = ".".join(p[1::])
+
+    _out = d
+
+    if x != None and x != Undefined and typeof(x) == "dict" and c in x:
+        _out = x[c] if len(p) == 1 else get(x[c], rest, d)
+
+    _out
+}
+
+# Does the ocds dict contain a given step key?
+exists = lambda ocds: any, step: str -> bool {
+    (typeof(ocds) == "dict") and (step in ocds)
+}
+
+# Extract the composed resource (or None) from ocds[step]
+resource = lambda ocds: any, step: str -> any {
+    _out = None
+    if exists(ocds, step):
+        # ocd entry is typically a dict-ish object with "Resource"
+        _out = get(ocds[step], "Resource", None)
+
+    _out
+}
+
+# Crossplane-style readiness: condition type=Ready status=True
+# (Works for most managed resources.)
+ready = lambda ocds: any, step: str -> bool {
+    r = resource(ocds, step)
+    conds = r?.status?.conditions if r?.status?.conditions != Undefined else []
+    any c in conds {c.type == "Ready" and c.status == "True"}
+}
+</file>
+
+<file path="configurations/common/prefilled_infisical_secret.k">
+import regex
+import k8s.apimachinery.pkg.apis.meta.v1 as meta
+import schemas.kcl.infisical_kcl.models.v1alpha1.secrets_infisical_com_v1alpha1_infisical_secret as infisical
+
+schema InfisicalSecret:
+    slug: str
+    keys: {str:str}
+
+    namespace: str = "default"
+    envSlug: str = "prod"
+    tokenSecretName: str = "infisical-token"
+    tokenSecretNamespace: str = "default"
+
+    # Sanitize slug to use as base path component: lowercase, hyphenated, alphanumeric only
+    basePath: str = "/" + regex.replace(slug, "[^a-zA-Z0-9_-]", "-")
+
+    secretsPath: str = basePath
+
+    secret: infisical.InfisicalSecret = {
+        metadata = meta.ObjectMeta {
+            name = slug
+            namespace = namespace
+        }
+        spec = {
+            resyncInterval = 60
+            authentication = {
+                serviceToken = {
+                    serviceTokenSecretReference = {
+                        secretName = tokenSecretName
+                        secretNamespace = tokenSecretNamespace
+                    }
+                    secretsScope = {
+                        envSlug = envSlug
+                        secretsPath = secretsPath
+                        recursive = False
+                    }
+                }
+            }
+            managedKubeSecretReferences = [{
+                secretName = slug
+                secretNamespace = namespace
+                creationPolicy = "Orphan"
+                secretType = "Opaque"
+                template = {
+                    includeAllSecrets = False
+                    data = {keys[k]: "{{ ." + k + ".Value }}" for k in keys}
+                }
+            }]
+        }
+    }
+</file>
+
+<file path="configurations/control_plane/digitalocean_config/nixos_frps_composition/functions/dns.k">
+import schemas.kcl.digitalocean_kcl.models.v1alpha1.dns_digitalocean_crossplane_io_v1alpha1_domain as do_domain
+import schemas.kcl.digitalocean_kcl.models.v1alpha1.dns_digitalocean_crossplane_io_v1alpha1_record as do_record
+import schemas.kcl.digitalocean_kcl.models.v1alpha1.droplet_digitalocean_crossplane_io_v1alpha1_droplet as do_droplet
+import k8s.apimachinery.pkg.apis.meta.v1 as meta
+import configurations.common.kclrun_helpers as h
+import manifests
+
+DOMAIN = "becker63.cloud"
+
+_ocds = option("params").ocds
+droplet_res: do_droplet.Droplet = _ocds[globalvars.steps.droplet]?.Resource
+
+droplet_ip_raw = droplet_res?.status?.atProvider?.ipv4Address
+maybe_droplet_ip = droplet_ip_raw if h.is_defined(droplet_ip_raw) else None
+
+_out: [do_domain.Domain | do_record.Record | [any]] = []
+
+if maybe_droplet_ip:
+    _domain = do_domain.Domain {
+        metadata = meta.ObjectMeta {name = "droplet-domain-name"}
+        spec = {
+            forProvider = {
+                name = DOMAIN
+                ipAddress = maybe_droplet_ip
+            }
+            providerConfigRef = {name = "default"}
+        }
+    }
+
+    _frps = do_record.Record {
+        metadata = meta.ObjectMeta {name = "frps-record"}
+        spec = {
+            forProvider = {
+                name = "frps"
+                domain = DOMAIN
+                $type = "A"
+                ttl = 300
+                value = maybe_droplet_ip
+            }
+            providerConfigRef = {name = "default"}
+        }
+    }
+
+    _headlamp = do_record.Record {
+        metadata = meta.ObjectMeta {name = "headlamp-record"}
+        spec = {
+            forProvider = {
+                name = "headlamp"
+                domain = DOMAIN
+                $type = "A"
+                ttl = 300
+                value = maybe_droplet_ip
+            }
+            providerConfigRef = {name = "default"}
+        }
+    }
+
+    _out = [_domain, _frps, _headlamp]
+
+# Emit whatever we built (empty list when IP isn’t ready yet)
+manifests.yaml_stream(_out)
+</file>
+
+<file path="configurations/control_plane/digitalocean_config/nixos_frps_composition/functions/droplet.k">
+import schemas.kcl.digitalocean_kcl.models.v1alpha1.custom_digitalocean_crossplane_io_v1alpha1_image as imageExport
+import schemas.kcl.digitalocean_kcl.models.v1alpha1.droplet_digitalocean_crossplane_io_v1alpha1_droplet as drop
+import configurations.control_plane.digitalocean_config.vars as globalvars
+import k8s.apimachinery.pkg.apis.meta.v1
+import manifests
+import configurations.common.kclrun_helpers as h
+
+_ocds = option("params").ocds
+image_resource: imageExport.Image = _ocds[globalvars.steps.image]?.Resource
+image_raw = image_resource?.status?.atProvider?.slug
+maybe_imageName = image_raw if h.is_defined(image_raw) else None
+
+_out_droplet: [drop.Droplet | any] = []
+
+if maybe_imageName:
+    _droplet = drop.Droplet {
+        metadata = v1.ObjectMeta {
+            name = "nixos-frps-droplet"
+        }
+        spec = {
+            forProvider = {
+                name = "nixos-frps-droplet"
+                region = globalvars.shared.region
+                size = "s-1vcpu-1gb"
+                imageRef = {
+                    name = maybe_imageName
+                }
+                monitoring = True
+                ipv6 = False
+                tags = ["crossplane", "nixos", "frps", "custom"]
+            }
+            providerConfigRef = {
+                name = "default"
+            }
+        }
+    }
+
+    _out_droplet = [_droplet]
+
+manifests.yaml_stream(_out_droplet)
+</file>
+
+<file path="configurations/control_plane/digitalocean_config/nixos_frps_composition/functions/image.k">
+import schemas.kcl.digitalocean_kcl.models.v1alpha1.custom_digitalocean_crossplane_io_v1alpha1_image as image
+import configurations.control_plane.digitalocean_config.vars as globalvars
+import k8s.apimachinery.pkg.apis.meta.v1
+import manifests
+
+_out_image = image.Image {
+    metadata = v1.ObjectMeta {
+        name = "managed_do_image_" + globalvars.shared.imageName
+    }
+    spec = {
+        forProvider = {
+            name = globalvars.shared.imageName
+            url = "https://github.com/becker63/home_network/releases/download/v1.0.0/frps_nixos.qcow2"
+            distribution = "nixos"
+            regions = [globalvars.shared.region]
+            description = "Our ustom nixos frps vm"
+            tags = ["crossplane", "custom-image", "nixos", "networking"]
+        }
+        providerConfigRef = {
+            name = "default"
+        }
+    }
+}
+
+manifests.yaml_stream(_out_image)
+</file>
+
+<file path="configurations/control_plane/digitalocean_config/nixos_frps_composition/composition.k">
+import schemas.kcl.crossplane_kcl_function_kcl.models.v1alpha1.krm_kcl_dev_v1alpha1_k_c_l_input as func
+import schemas.kcl.crossplane_kcl.models.v1.apiextensions_crossplane_io_v1_composition as compdef
+import schemas.kcl.crossplane_kcl.models.v1.apiextensions_crossplane_io_v1_composite_resource_definition as crd
+import configurations.control_plane.digitalocean_config.vars as globalvars
+import k8s.apimachinery.pkg.apis.meta.v1
+import file
+import manifests
+
+KIND = "digitalocean-config"
+GROUP = "becker.cloud"
+PLURAL = "digitalocean-configs"
+COMPOSITION_NAME = "digitalocean-config-comp"
+XR_NAME = "digitalocean-config"
+
+DEPENDENCIES = """
+
+                k8s = "1.31.2"
+                home_network = { git = "https://github.com/becker63/home_network/", commit = "8559064", version = "0.0.2" }
+
+                """
+
+generate_function_meta = lambda filepath: str, step: str {
+    _filename = filepath.split("/")[-1]
+    _slug = _filename.split(".")[0]
+
+    {
+        step = step
+        functionRef = {
+            name = "crossplane-contrib-function-kcl"
+        }
+        input = func.KCLInput {
+            metadata = v1.ObjectMeta {
+                name = _slug
+            }
+            spec = {
+                source = file.read(filepath)
+                target = "Resources"
+                dependencies = DEPENDENCIES
+            }
+        }
+    }
+}
+
+xrd = crd.CompositeResourceDefinition {
+    metadata.name = "${PLURAL}.${GROUP}"
+    spec = {
+        group = GROUP
+        names = {
+            kind = KIND
+            plural = PLURAL
+        }
+        versions = [{
+            name = "v1alpha1"
+            served = True
+            referenceable = True
+            schema.openAPIV3Schema = {type = "object"}
+        }]
+    }
+}
+
+comp = compdef.Composition {
+    metadata.name = COMPOSITION_NAME
+    spec = {
+        compositeTypeRef = {
+            apiVersion = "${GROUP}/v1alpha1"
+            kind = KIND
+        }
+        mode = "Pipeline"
+        pipeline = [
+            generate_function_meta("functions/droplet.k", globalvars.steps.droplet)
+            generate_function_meta("functions/image.k", globalvars.steps.image)
+            generate_function_meta("functions/dns.k", globalvars.steps.dns)
+        ]
+    }
+}
+
+xr = {
+    apiVersion = "${GROUP}/v1alpha1"
+    kind = KIND
+    metadata = {name = XR_NAME}
+    spec = {
+        compositionRef.name = COMPOSITION_NAME
+    }
+}
+
+manifests.yaml_stream([xrd, comp, xr])
+</file>
+
+<file path="configurations/control_plane/digitalocean_config/provider_config.k">
+import manifests
+import schemas.kcl.digitalocean_kcl.models.v1beta1.digitalocean_crossplane_io_v1beta1_provider_config as do_provider
+import k8s.apimachinery.pkg.apis.meta.v1 as meta
+import configurations.common.prefilled_infisical_secret as I
+
+do_api_token = I.InfisicalSecret {
+    slug = "digitalocean-provider-token"
+    keys = {
+        "DIGITALOCEAN_ACCESS_TOKEN": "token"
+    }
+}
+
+do_provider_config = do_provider.ProviderConfig {
+    metadata = meta.ObjectMeta {
+        name = "default"
+    }
+    spec = {
+        credentials = {
+            source = "Secret"
+            secretRef = {
+                namespace = "default"
+                name = "digitalocean-provider-token"
+                key = "DIGITALOCEAN_ACCESS_TOKEN"
+            }
+        }
+    }
+}
+
+manifests.yaml_stream([
+    do_api_token
+    do_provider_config
+])
+</file>
+
+<file path="configurations/control_plane/digitalocean_config/vars.k">
+schema stepEnum:
+    droplet: str = "droplet"
+    image: str = "image"
+    dns: str = "dns"
+
+schema shared_schema:
+    region: str
+    imageName: str
+
+shared: shared_schema = {
+    region = "nyc3"
+    imageName = "frps_nixos"
+}
+
+steps: stepEnum = {
+    droplet = "droplet"
+    image = "image"
+    dns = "dns"
+}
+</file>
+
+<file path="configurations/control_plane/ingress/FRPC_Config.k">
+import schemas.kcl
+</file>
+
+<file path="lib/lib.py">
+def test(a: str):
+    print(a)
+    print("this is a test of imports")
+</file>
+
+<file path="rules/groups/crd_codegen_groups.bzl">
+load("//rules:crd-to-cloudcoil.bzl", "python_codegen")
+
+def crd_codegen_from_tree(
+    *,
+    name_prefix,
+    srcs,
+    namespace_prefix,
+):
+    """
+    Split a flat list of CRD YAML files into multiple python_codegen targets
+    based on their top-level directory.
+
+    This is *deliberately* done at analysis time so Buck can:
+      - parallelize code generation across CRD groups
+      - cache each group independently
+      - avoid one large CRD blocking all others
+
+    Example:
+      srcs = [
+        "cert-manager/foo.yaml",
+        "cert-manager/bar.yaml",
+        "fluxcd-source/baz.yaml",
+      ]
+
+      =>
+      python_codegen(
+        name = "gen_cert_manager",
+        srcs = [...],
+        namespace = "generated.models.cert_manager",
+      )
+
+      python_codegen(
+        name = "gen_fluxcd_source",
+        srcs = [...],
+        namespace = "generated.models.fluxcd_source",
+      )
+    """
+
+    # Map of <top-level-dir> -> [list of yaml files]
+    groups = {}
+
+    for src in srcs:
+        # src is a string path like "cert-manager/foo/bar.yaml"
+        # We intentionally only look at the first path segment
+        # to define a "CRD group".
+        top = src.split("/")[0]
+        groups.setdefault(top, []).append(src)
+
+    targets = []
+
+    for group, group_srcs in groups.items():
+        # Buck target names and Python module names cannot contain '-'
+        safe = group.replace("-", "_")
+
+        # Use the CRD name directly as the target name
+        name = safe
+
+        python_codegen(
+            name = name,
+            srcs = group_srcs,
+            namespace = safe,
+        )
+
+        targets.append(":{}".format(name))
+
+
+    return targets
+</file>
+
+<file path="rules/groups/kcl_codegen_groups.bzl">
+load("//rules:crd-to-kcl.bzl", "kcl_crd_import")
+
+def kcl_codegen_from_tree(
+    *,
+    srcs,
+):
+    """
+    Split CRDs by top-level directory and generate KCL schemas
+    using `kcl import -m crd`.
+    """
+
+    groups = {}
+
+    for src in srcs:
+        top = src.split("/")[0]
+        groups.setdefault(top, []).append(src)
+
+    targets = []
+
+    for group, group_srcs in groups.items():
+        safe = group.replace("-", "_")
+
+        kcl_crd_import(
+            name = "{}_kcl".format(safe),
+            srcs = group_srcs,
+        )
+
+        targets.append(":{}_kcl".format(safe))
+
+    return targets
+</file>
+
+<file path="rules/crd-to-kcl.bzl">
+def _kcl_crd_import_impl(ctx):
+    """
+    Runs `kcl import -m crd` over a group of CRD YAML files and
+    emits generated KCL schema files into a directory.
+    """
+
+    out = ctx.actions.declare_output(ctx.label.name, dir=True)
+
+    kcl = ctx.attrs._kcl[RunInfo]
+
+    args = cmd_args()
+    args.add("import")
+    args.add("-m", "crd")
+
+    # Input CRDs
+    for src in ctx.attrs.srcs:
+        args.add(src)
+
+    # Output directory
+    args.add("--output", out.as_output())
+
+    ctx.actions.run(
+        cmd_args(kcl, args),
+        category = "kcl_crd_import",
+    )
+
+    return [DefaultInfo(default_outputs = [out])]
+
+
+kcl_crd_import = rule(
+    impl = _kcl_crd_import_impl,
+    attrs = {
+        "srcs": attrs.list(attrs.source(), default=[]),
+
+        # kcl executable
+        "_kcl": attrs.exec_dep(default = "toolchains//:kcl"),
+    },
+)
+</file>
+
+<file path="rules/go-schema-kcl.bzl">
+def _frp_schema_codegen_impl(ctx):
+    out = ctx.actions.declare_output(ctx.label.name, dir=True)
+
+    tool = ctx.attrs._tool[RunInfo]
+
+    args = cmd_args(
+        "--out-dir", out.as_output()
+    )
+
+    ctx.actions.run(
+        cmd_args([tool, args]),
+        category = "frp_schema_codegen",
+    )
+
+    return [DefaultInfo(default_outputs=[out])]
+
+
+frp_schema_codegen = rule(
+    impl = _frp_schema_codegen_impl,
+    attrs = {
+        "_tool": attrs.exec_dep(
+            default = "toolchains//:go-schema-kcl",
+        ),
+    },
+)
+</file>
+
+<file path="tests/BUCK">
+python_bootstrap_binary(
+    name = "test",
+    main = "run_pytest.py",
+)
+</file>
+
+<file path="tests/conftest.py">
+import pytest
+
+
+@pytest.fixture
+def dummy():
+    return "hello from fixture"
+</file>
+
+<file path="tests/run_pytest.py">
+import sys
+
+import pytest
+
+if __name__ == "__main__":
+    raise SystemExit(pytest.main(sys.argv[1:]))
+</file>
+
+<file path="toolchains/codegen_scripts/go-schema-kcl/go.mod">
+module github.com/becker63/home/src/codegen/go-schema-kcl
+
+go 1.25.4
+
+require (
+	github.com/fatedier/frp v0.65.0
+	github.com/invopop/jsonschema v0.13.0
+)
+
+require (
+	github.com/alecthomas/kong v1.13.0 // indirect
+	github.com/bahlo/generic-list-go v0.2.0 // indirect
+	github.com/buger/jsonparser v1.1.1 // indirect
+	github.com/fatedier/golib v0.5.1 // indirect
+	github.com/kr/text v0.2.0 // indirect
+	github.com/mailru/easyjson v0.7.7 // indirect
+	github.com/samber/lo v1.47.0 // indirect
+	github.com/wk8/go-ordered-map/v2 v2.1.8 // indirect
+	golang.org/x/text v0.24.0 // indirect
+	gopkg.in/yaml.v3 v3.0.1 // indirect
+)
+</file>
+
+<file path="toolchains/codegen_scripts/go-schema-kcl/gomod2nix.toml">
+schema = 3
+
+[mod]
+  [mod."github.com/alecthomas/kong"]
+    version = "v1.13.0"
+    hash = "sha256-9nSlldkif002WKjCIRBUmTofdtSL16V9NUZZ1PD34c0="
+  [mod."github.com/bahlo/generic-list-go"]
+    version = "v0.2.0"
+    hash = "sha256-BIzqwG61hnMDknZOn/5+VX09yemzFzMjhPF48XoALto="
+  [mod."github.com/buger/jsonparser"]
+    version = "v1.1.1"
+    hash = "sha256-T6dXT6Vzpm8gvQYi+c2LZkV+8ZOp0ZXBX7+e1mlliZE="
+  [mod."github.com/fatedier/frp"]
+    version = "v0.65.0"
+    hash = "sha256-otzzBBd/XABe+h7nZIw0kUsgZgX2XRo4+Tx7Fq/64ro="
+  [mod."github.com/fatedier/golib"]
+    version = "v0.5.1"
+    hash = "sha256-EWkKkk7SFeo3sdK+5ngsJS8vupWWcxmG85B5HOA2jKY="
+  [mod."github.com/invopop/jsonschema"]
+    version = "v0.13.0"
+    hash = "sha256-Fe4DQDJQxy5i8cgJY6dFbraTnfG/C2D3cB1Q5p2QxVc="
+  [mod."github.com/kr/text"]
+    version = "v0.2.0"
+    hash = "sha256-fadcWxZOORv44oak3jTxm6YcITcFxdGt4bpn869HxUE="
+  [mod."github.com/mailru/easyjson"]
+    version = "v0.7.7"
+    hash = "sha256-NVCz8MURpxgOjHXqxOZExqV4bnpHggpeAOyZDArjcy4="
+  [mod."github.com/samber/lo"]
+    version = "v1.47.0"
+    hash = "sha256-jMXexVTlPdZ40STRpBLv7b+BIRqdxxra12Pl2Mj7Nz8="
+  [mod."github.com/wk8/go-ordered-map/v2"]
+    version = "v2.1.8"
+    hash = "sha256-v7/5+7lAypZfgClXgWxhxtA1skQq9o+1yrI+V0o1j2o="
+  [mod."golang.org/x/text"]
+    version = "v0.24.0"
+    hash = "sha256-qFbmteGOvJfvbLXiOSI8Fsz5Ixt2ZhSYx0/sIqApC7Y="
+  [mod."gopkg.in/yaml.v3"]
+    version = "v3.0.1"
+    hash = "sha256-FqL9TKYJ0XkNwJFnq9j0VvJ5ZUU1RvH/52h/f5bkYAU="
+</file>
+
+<file path="toolchains/codegen_scripts/go-schema-kcl/main.go">
+package main
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"log"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+	"time"
+
+	"github.com/alecthomas/kong"
+	frpv1 "github.com/fatedier/frp/pkg/config/v1"
+	"github.com/invopop/jsonschema"
+)
+
+/* =========================
+   CLI
+   ========================= */
+
+type CLI struct {
+	OutDir string `help:"Output directory" required:""`
+}
+
+/* =========================
+   Schema generation
+   ========================= */
+
+type SchemaTarget struct {
+	Dir             string
+	Filename        string
+	Example         interface{}
+	PatchProperties map[string]string
+}
+
+func generateSchema(filepath string, example interface{}, patch map[string]string) error {
+	schema := jsonschema.Reflect(example)
+
+	rawBytes, err := json.Marshal(schema)
+	if err != nil {
+		return fmt.Errorf("marshal schema: %w", err)
+	}
+
+	var normalized map[string]interface{}
+	if err := json.Unmarshal(rawBytes, &normalized); err != nil {
+		return fmt.Errorf("unmarshal schema: %w", err)
+	}
+
+	defsKey := "$defs"
+	if _, ok := normalized["definitions"]; ok {
+		defsKey = "definitions"
+	}
+
+	defs, ok := normalized[defsKey].(map[string]interface{})
+	if !ok {
+		return fmt.Errorf("no %q found in schema", defsKey)
+	}
+
+	for patchPath, patchType := range patch {
+		parts := strings.Split(patchPath, ".")
+		if len(parts) != 2 {
+			fmt.Fprintf(os.Stderr, "⚠️ invalid patch key %q\n", patchPath)
+			continue
+		}
+
+		schemaName, propName := parts[0], parts[1]
+
+		targetSchema, ok := defs[schemaName].(map[string]interface{})
+		if !ok {
+			fmt.Fprintf(os.Stderr, "⚠️ schema %q not found\n", schemaName)
+			continue
+		}
+
+		props, ok := targetSchema["properties"].(map[string]interface{})
+		if !ok {
+			fmt.Fprintf(os.Stderr, "⚠️ schema %q has no properties\n", schemaName)
+			continue
+		}
+
+		switch patchType {
+		case "any":
+			props[propName] = map[string]interface{}{}
+		case "array<any>":
+			props[propName] = map[string]interface{}{
+				"type":  "array",
+				"items": map[string]interface{}{},
+			}
+		case "object<any>":
+			props[propName] = map[string]interface{}{
+				"type":                 "object",
+				"additionalProperties": map[string]interface{}{},
+			}
+		default:
+			fmt.Fprintf(os.Stderr, "⚠️ unknown patch type %q\n", patchType)
+		}
+	}
+
+	file, err := os.Create(filepath)
+	if err != nil {
+		return fmt.Errorf("create schema file: %w", err)
+	}
+	defer file.Close()
+
+	enc := json.NewEncoder(file)
+	enc.SetIndent("", "  ")
+	return enc.Encode(normalized)
+}
+
+/* =========================
+   KCL helpers
+   ========================= */
+
+func runCommand(name string, args []string, dir string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, name, args...)
+	cmd.Dir = dir
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	return cmd.Run()
+}
+
+func runKCLModInit(dir string) error {
+	return runCommand("kcl", []string{"mod", "init"}, dir)
+}
+
+func runKCLImport(schemaFile, dir string) error {
+	return runCommand("kcl", []string{"import", "-m", "jsonschema", schemaFile, "--force"}, dir)
+}
+
+func removeMainK(dir string) error {
+	mainK := filepath.Join(dir, "main.k")
+	if err := os.Remove(mainK); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return nil
+}
+
+func ensureDir(dir string) error {
+	return os.MkdirAll(dir, 0755)
+}
+
+func handleSchema(target SchemaTarget) error {
+	fmt.Printf("📦 %s\n", target.Dir)
+
+	if err := ensureDir(target.Dir); err != nil {
+		return err
+	}
+	if err := runKCLModInit(target.Dir); err != nil {
+		return err
+	}
+	if err := removeMainK(target.Dir); err != nil {
+		return err
+	}
+
+	schemaPath := filepath.Join(target.Dir, target.Filename)
+	if err := generateSchema(schemaPath, target.Example, target.PatchProperties); err != nil {
+		return err
+	}
+
+	return runKCLImport(target.Filename, target.Dir)
+}
+
+/* =========================
+   Targets (always all)
+   ========================= */
+
+func buildTargets(root string) []SchemaTarget {
+	return []SchemaTarget{
+		{
+			Dir:      filepath.Join(root, "frpc"),
+			Filename: "frpcschema.json",
+			Example:  &frpv1.ClientConfig{},
+			PatchProperties: map[string]string{
+				"ClientConfig.proxies":  "array<any>",
+				"ClientConfig.visitors": "array<any>",
+			},
+		},
+		{
+			Dir:      filepath.Join(root, "frps"),
+			Filename: "frpsschema.json",
+			Example:  &frpv1.ServerConfig{},
+		},
+		{
+			Dir:      filepath.Join(root, "frpc", "tcp_proxy"),
+			Filename: "tcp_proxy.schema.json",
+			Example:  &frpv1.TCPProxyConfig{},
+		},
+	}
+}
+
+/* =========================
+   main
+   ========================= */
+
+func main() {
+	var cli CLI
+	kong.Parse(&cli)
+
+	outDir, err := filepath.Abs(cli.OutDir)
+	if err != nil {
+		log.Fatalf("invalid out-dir: %v", err)
+	}
+
+	if outDir == "/" {
+		log.Fatal("refusing to write to filesystem root")
+	}
+
+	for _, target := range buildTargets(outDir) {
+		if err := handleSchema(target); err != nil {
+			log.Fatalf("❌ %s: %v", target.Dir, err)
+		}
+	}
+}
+</file>
+
+<file path="toolchains/codegen_scripts/python-crd-cloudcoil/templates/BaseModel.jinja2">
+{% for decorator in decorators -%}
+{{ decorator }}
+{% endfor -%}
+{%- if is_list %}
+{{ class_name }} = ResourceList["{{ class_name.replace('List', '') }}"]
+{%- else %}
+{%- if is_gvk %}
+class {{ class_name }}(Resource):{% if comment is defined %}  # {{ comment }}{% endif %}
+{%- else %}
+class {{ class_name }}(BaseModel):{% if comment is defined %}  # {{ comment }}{% endif %}
+{%- endif %}
+{%- if description %}
+    """
+    {{ description | replace("\t", " "*4) | trim | indent(4) }}
+    """
+{%- endif %}
+
+    class Builder(BaseModelBuilder):
+
+        @property
+        def cls(self) -> Type["{{ class_name }}"]:
+            return {{ class_name }}
+            
+        def build(self) -> "{{ class_name }}":
+            return {{ class_name }}(**self._attrs)
+
+    {%- for field in fields %}
+        {%- set field_setter_name = field.name if field.name != "build" else "build_" %}
+        {%- if field.data_type.data_types and field.data_type.data_types[0].is_list  %}
+        {%- set item_type = field.data_type.data_types[0].data_types[0] %}
+        {%- if item_type.reference is not none %}
+        @overload
+        def {{ field_setter_name }}(self, value_or_callback: List[{{ item_type.type_hint }}], /) -> "{{ class_name }}.Builder": ...
+        
+        @overload
+        def {{ field_setter_name }}(self, value_or_callback: Callable[[GenericListBuilder[{{ item_type.type_hint }}, {{ item_type.type_hint }}.Builder]], GenericListBuilder[{{ item_type.type_hint }}, {{ item_type.type_hint }}.Builder] | List[{{ item_type.type_hint }}]], /) -> "{{ class_name }}.Builder": ...
+        
+        @overload
+        def {{ field_setter_name }}(self, value_or_callback: Never = ...) -> ListBuilderContext[{{ item_type.type_hint }}.Builder]: ...
+        
+        def {{ field_setter_name }}(self, value_or_callback=None, /):
+            {%- if field.docstring %}
+            """
+            {{ field.docstring | replace("\t", " "*4) | trim | indent(12) }}
+            """
+            {%- endif %}
+            if self._in_context and value_or_callback is None:
+                context = ListBuilderContext[{{ item_type.type_hint }}.Builder]()
+                context._parent_builder = self
+                context._field_name = "{{ field.name }}"
+                return context
+
+            value = value_or_callback
+            if callable(value_or_callback):
+                output = value_or_callback({{ item_type.type_hint }}.list_builder())
+                if isinstance(output, GenericListBuilder):
+                    value = output.build()
+                else:
+                    value = output
+            return self._set("{{ field.name }}", value)
+        {%- else %}
+        def {{ field_setter_name }}(self, value: {{ field.type_hint }}, /) -> Self:
+            {%- if field.docstring %}
+            """
+            {{ field.docstring | replace("\t", " "*4) | trim | indent(12) }}
+            """
+            {%- endif %}
+            return self._set("{{ field.name }}", value)
+        {%- endif %}
+        {%- else %}
+        {%- if field.data_type.reference is not none %}
+        @overload
+        def {{ field_setter_name }}(self, value_or_callback: {{ field.type_hint }}, /) -> "{{ class_name }}.Builder": ...
+        
+        @overload
+        def {{ field_setter_name }}(self, value_or_callback: Callable[[{{ field.data_type.type_hint }}.Builder], {{ field.data_type.type_hint }}.Builder | {{ field.data_type.type_hint }}], /) -> "{{ class_name }}.Builder": ...
+        
+        @overload
+        def {{ field_setter_name }}(self, value_or_callback: Never = ...) -> "{{ field.data_type.type_hint }}.BuilderContext": ...
+        
+        def {{ field_setter_name }}(self, value_or_callback=None, /):
+            {%- if field.docstring %}
+            """
+            {{ field.docstring | replace("\t", " "*4) | trim | indent(12) }}
+            """
+            {%- endif %}
+            if self._in_context and value_or_callback is None:
+                context = {{ field.data_type.type_hint }}.BuilderContext()
+                context._parent_builder = self
+                context._field_name = "{{ field.name }}"
+                return context
+
+            value = value_or_callback
+            if callable(value_or_callback):
+                output = value_or_callback({{ field.data_type.type_hint }}.builder())
+                if isinstance(output, {{ field.data_type.type_hint }}.Builder):
+                    value = output.build()
+                else:
+                    value = output
+            return self._set("{{ field.name }}", value)
+        {%- else %}
+        def {{ field_setter_name }}(self, value: {{ field.type_hint }}, /) -> Self:
+            {%- if field.docstring %}
+            """
+            {{ field.docstring | replace("\t", " "*4) | trim | indent(12) }}
+            """
+            {%- endif %}
+            return self._set("{{ field.name }}", value)
+        {%- endif %}
+        {%- endif %}
+    {%- endfor %}
+
+    class BuilderContext(BuilderContextBase["{{ class_name }}.Builder"]):
+        def model_post_init(self, __context) -> None:
+            self._builder = {{ class_name }}.Builder()
+            self._builder._in_context = True
+            self._parent_builder = None
+            self._field_name = None
+
+    @classmethod
+    def builder(cls) -> Builder:
+        return cls.Builder()
+        
+    @classmethod
+    def new(cls) -> BuilderContext:
+        """Creates a new context manager builder for {{ class_name }}."""
+        return cls.BuilderContext()
+
+    class ListBuilder(GenericListBuilder["{{class_name}}", Builder]):
+        def __init__(self):
+            raise NotImplementedError("This class is not meant to be instantiated. Use {{ class_name }}.list_builder() instead.")
+
+    @classmethod
+    def list_builder(cls) -> ListBuilder:
+        return GenericListBuilder[cls, cls.Builder]()  # type: ignore
+
+{%- if not fields and not description %}
+    pass
+{%- endif %}
+{%- if config %}
+{%- filter indent(4) %}
+{% include 'ConfigDict.jinja2' %}
+{%- endfilter %}
+{%- endif %}
+{%- for field in fields -%}
+    {%- if not field.annotated and field.field %}
+    {{ field.name }}: {{ field.type_hint }} = {{ field.field }}
+    {%- else %}
+    {%- if field.annotated %}
+    {{ field.name }}: {{ field.annotated }}
+    {%- else %}
+    {{ field.name }}: {{ field.type_hint }}
+    {%- endif %}
+    {%- if not (field.required or (field.represented_default == 'None' and field.strip_default_none)) or field.data_type.is_optional
+            %} = {% if field.represented_default == "{}" and field.data_type.reference is not none %}{{ field.data_type.type_hint }}.model_validate({{ field.represented_default }}){% else %}{{ field.represented_default }}{% endif %}
+    {%- endif -%}
+    {%- endif %}
+    {%- if field.docstring %}
+    """
+    {{ field.docstring | replace("\t", " "*4) | trim | indent(4) }}
+    """
+    {%- endif %}
+{%- for method in methods -%}
+    {{ method }}
+{%- endfor -%}
+{%- endfor -%}
+{%- endif -%}
+</file>
+
+<file path="toolchains/codegen_scripts/python-crd-cloudcoil/templates/ConfigDict.jinja2">
+{% if extra_fields %}
+model_config = ConfigDict(extra="{{ extra_fields }}")
+{% endif %}
+</file>
+
+<file path="toolchains/codegen_scripts/python-crd-cloudcoil/templates/RootModel.jinja2">
+{%- macro get_type_hint(_fields) -%}
+{%- if _fields -%}
+{{- _fields[0].type_hint}}
+{%- endif -%}
+{%- endmacro -%}
+
+{% for decorator in decorators -%}
+{{ decorator }}
+{% endfor -%}
+
+class {{ class_name }}({{ base_class }}{%- if fields -%}[{{get_type_hint(fields)}}]{%- endif -%}):{% if comment is defined %}  # {{ comment }}{% endif %}
+{%- if description %}
+    """
+    {{ description | replace("\t", " "*4) | trim | indent(4) }}
+    """
+{%- endif %}
+
+{%- if config %}
+{%- filter indent(4) %}
+{% include 'ConfigDict.jinja2' %}
+{%- endfilter %}
+{%- endif %}
+{%- if not fields and not description %}
+    class Builder(BaseBuilder):
+        @property
+        def cls(self) -> Type["{{ class_name }}"]:
+            return {{ class_name }}
+        def build(self) -> "{{ class_name }}":
+            return {{ class_name }}()
+{%- else %}
+    {%- set field = fields[0] %}
+    class Builder(BaseBuilder):
+        _value: {{ field.type_hint }} | None = None
+
+        def root(self, value: {{ field.type_hint }}, /) -> Self:
+            {%- if field.docstring %}
+            """
+            {{ field.docstring | replace("\t", " "*4) | trim | indent(12) }}
+            """
+            {%- endif %}
+            self._value = value
+            return self
+
+        def __call__(self, value: {{ field.type_hint }}, /) -> Self:
+            {%- if field.docstring %}
+            """
+            {{ field.docstring | replace("\t", " "*4) | trim | indent(12) }}
+            """
+            {%- endif %}
+            self._value = value
+            return self
+
+        def build(self) -> "{{ class_name }}":
+            value = cast({{ field.type_hint }}, self._value)
+            return {{ class_name }}(value)
+
+    {%- if not field.annotated and field.field %}
+    root: {{ field.type_hint }} = {{ field.field }}
+    {%- else %}
+    {%- if field.annotated %}
+    root: {{ field.annotated }}
+    {%- else %}
+    root: {{ field.type_hint }}
+    {%- endif %}
+    {%- if not (field.required or (field.represented_default == 'None' and field.strip_default_none))
+            %} = {{ field.represented_default }}
+    {%- endif -%}
+    {%- endif %}
+    {%- if field.docstring %}
+    """
+    {{ field.docstring | replace("\t", " "*4) | trim | indent(4) }}
+    """
+    {%- endif %}
+{%- endif %}
+    class BuilderContext(BuilderContextBase["{{ class_name }}.Builder"]):
+        def model_post_init(self, __context) -> None:
+            self._builder = {{ class_name }}.Builder()
+            self._parent_builder = None
+            self._field_name = None
+
+    @classmethod
+    def builder(cls) -> Builder:
+        return cls.Builder()
+
+    @classmethod
+    def new(cls) -> BuilderContext:
+        """Creates a new context manager builder for {{ class_name }}."""
+        return cls.BuilderContext()
+</file>
+
+<file path="toolchains/codegen_scripts/python-crd-cloudcoil/main.py">
+import re
+import shutil
+import sys
+from importlib.resources import as_file, files
+from pathlib import Path
+from typing import List
+
+import typer
+from cloudcoil.codegen.generator import ModelConfig, Transformation, generate
+
+app = typer.Typer()
+
+ROOT = Path(__file__).parent
+TEMPLATE_DIR = ROOT / "templates"
+
+
+def build_model_config(
+    namespace: str, inputs: List[str], output_dir: Path
+) -> ModelConfig:
+    return ModelConfig(
+        namespace=namespace,
+        input_=inputs,
+        output=output_dir,
+        mode="resource",
+        log_level="INFO",
+        transformations=[
+            Transformation(
+                match_=re.compile(
+                    r"^io\.k8s\.apimachinery\.pkg\.apis\.meta\.v1\.ObjectMeta$"
+                ),
+                replace="apimachinery.ObjectMeta",
+                namespace="cloudcoil",
+            )
+        ],
+        additional_datamodel_codegen_args=[
+            "--custom-template-dir",
+            str(TEMPLATE_DIR.absolute()),
+        ],
+        generate_init=True,
+        generate_py_typed=True,
+    )
+
+
+def clean_output_dir(output: Path, clean: bool):
+    if clean and output.exists():
+        shutil.rmtree(output)
+    output.mkdir(parents=True, exist_ok=True)
+
+
+@app.command()
+def main(
+    namespace: str = typer.Argument(...),
+    input: List[str] = typer.Option(..., "--input", "-i"),
+    output: Path = typer.Option(..., "--output", "-o"),
+    clean: bool = typer.Option(False, "--clean"),
+):
+    clean_output_dir(output, clean)
+
+    config = build_model_config(namespace, input, output)
+    try:
+        generate(config)
+    except Exception as e:
+        raise SystemExit(1)
+
+
+if __name__ == "__main__":
+    app()
+</file>
+
+<file path="toolchains/uv2nix.nix">
+{
+  nixpkgs,
+  pyproject-nix,
+  uv2nix,
+  pyproject-build-systems,
+}:
+
+let
+  lib = nixpkgs.lib;
+  forAllSystems = lib.genAttrs lib.systems.flakeExposed;
+
+  # Load workspace from toolchains/
+  workspace = uv2nix.lib.workspace.loadWorkspace {
+    workspaceRoot = ./venv;
+  };
+
+  overlay = workspace.mkPyprojectOverlay {
+    sourcePreference = "wheel";
+  };
+
+  editableOverlay = workspace.mkEditablePyprojectOverlay {
+    root = "$REPO_ROOT";
+  };
+
+  pythonSets = forAllSystems (
+    system:
+    let
+      pkgs = nixpkgs.legacyPackages.${system};
+      python = pkgs.python3;
+    in
+    (pkgs.callPackage pyproject-nix.build.packages {
+      inherit python;
+    }).overrideScope
+      (
+        lib.composeManyExtensions [
+          pyproject-build-systems.overlays.wheel
+          overlay
+        ]
+      )
+  );
+in
+{
+  inherit
+    workspace
+    overlay
+    editableOverlay
+    pythonSets
+    ;
+}
+</file>
+
+<file path=".buckconfig">
+[cells]
+  root = .
+  prelude = prelude
+  toolchains = toolchains
+  hsconfig = config
+  none = none
+  nix = none
+
+[cell_aliases]
+  config = prelude
+  ovr_config = prelude
+  fbcode = none
+  fbsource = none
+  fbcode_macros = none
+  buck = none
+
+[external_cells]
+  prelude = bundled
+  nix = git
+
+[parser]
+  target_platform_detector_spec = target:root//...->prelude//platforms:default
+
+[project]
+  ignore = .git, tmp
+
+[buck2]
+  materializations = deferred
+</file>
+
+<file path="flake.lock">
+{
+  "nodes": {
+    "buck2-nix": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1756462063,
+        "narHash": "sha256-FIGJSsPLYmQCVU620vD6t2uVg84G2YEWQzahJO00kVY=",
+        "owner": "tweag",
+        "repo": "buck2.nix",
+        "rev": "038b031b84846101030b9d081445003e82e3be5c",
+        "type": "github"
+      },
+      "original": {
+        "owner": "tweag",
+        "repo": "buck2.nix",
+        "type": "github"
+      }
+    },
+    "flake-utils": {
+      "inputs": {
+        "systems": "systems"
+      },
+      "locked": {
+        "lastModified": 1731533236,
+        "narHash": "sha256-l0KFg5HjrsfsO/JpG+r7fRrqm12kzFHyUHqHCVpMMbI=",
+        "owner": "numtide",
+        "repo": "flake-utils",
+        "rev": "11707dc2f618dd54ca8739b309ec4fc024de578b",
+        "type": "github"
+      },
+      "original": {
+        "owner": "numtide",
+        "repo": "flake-utils",
+        "type": "github"
+      }
+    },
+    "gomod2nix": {
+      "inputs": {
+        "flake-utils": "flake-utils",
+        "nixpkgs": [
+          "toolchains",
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1763982521,
+        "narHash": "sha256-ur4QIAHwgFc0vXiaxn5No/FuZicxBr2p0gmT54xZkUQ=",
+        "owner": "nix-community",
+        "repo": "gomod2nix",
+        "rev": "02e63a239d6eabd595db56852535992c898eba72",
+        "type": "github"
+      },
+      "original": {
+        "owner": "nix-community",
+        "repo": "gomod2nix",
+        "type": "github"
+      }
+    },
+    "nixpkgs": {
+      "locked": {
+        "lastModified": 1764950072,
+        "narHash": "sha256-BmPWzogsG2GsXZtlT+MTcAWeDK5hkbGRZTeZNW42fwA=",
+        "owner": "nixos",
+        "repo": "nixpkgs",
+        "rev": "f61125a668a320878494449750330ca58b78c557",
+        "type": "github"
+      },
+      "original": {
+        "owner": "nixos",
+        "ref": "nixos-unstable",
+        "repo": "nixpkgs",
+        "type": "github"
+      }
+    },
+    "pyproject-build-systems": {
+      "inputs": {
+        "nixpkgs": [
+          "toolchains",
+          "nixpkgs"
+        ],
+        "pyproject-nix": [
+          "toolchains",
+          "pyproject-nix"
+        ],
+        "uv2nix": [
+          "toolchains",
+          "uv2nix"
+        ]
+      },
+      "locked": {
+        "lastModified": 1763662255,
+        "narHash": "sha256-4bocaOyLa3AfiS8KrWjZQYu+IAta05u3gYZzZ6zXbT0=",
+        "owner": "pyproject-nix",
+        "repo": "build-system-pkgs",
+        "rev": "042904167604c681a090c07eb6967b4dd4dae88c",
+        "type": "github"
+      },
+      "original": {
+        "owner": "pyproject-nix",
+        "repo": "build-system-pkgs",
+        "type": "github"
+      }
+    },
+    "pyproject-nix": {
+      "inputs": {
+        "nixpkgs": [
+          "toolchains",
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1764134915,
+        "narHash": "sha256-xaKvtPx6YAnA3HQVp5LwyYG1MaN4LLehpQI8xEdBvBY=",
+        "owner": "pyproject-nix",
+        "repo": "pyproject.nix",
+        "rev": "2c8df1383b32e5443c921f61224b198a2282a657",
+        "type": "github"
+      },
+      "original": {
+        "owner": "pyproject-nix",
+        "repo": "pyproject.nix",
+        "type": "github"
+      }
+    },
+    "root": {
+      "inputs": {
+        "toolchains": "toolchains"
+      }
+    },
+    "systems": {
+      "locked": {
+        "lastModified": 1681028828,
+        "narHash": "sha256-Vy1rq5AaRuLzOxct8nz4T6wlgyUR7zLU309k9mBC768=",
+        "owner": "nix-systems",
+        "repo": "default",
+        "rev": "da67096a3b9bf56a91d16901293e51ba5b49a27e",
+        "type": "github"
+      },
+      "original": {
+        "owner": "nix-systems",
+        "repo": "default",
+        "type": "github"
+      }
+    },
+    "toolchains": {
+      "inputs": {
+        "buck2-nix": "buck2-nix",
+        "gomod2nix": "gomod2nix",
+        "nixpkgs": "nixpkgs",
+        "pyproject-build-systems": "pyproject-build-systems",
+        "pyproject-nix": "pyproject-nix",
+        "uv2nix": "uv2nix"
+      },
+      "locked": {
+        "path": "./toolchains",
+        "type": "path"
+      },
+      "original": {
+        "path": "./toolchains",
+        "type": "path"
+      },
+      "parent": []
+    },
+    "uv2nix": {
+      "inputs": {
+        "nixpkgs": [
+          "toolchains",
+          "nixpkgs"
+        ],
+        "pyproject-nix": [
+          "toolchains",
+          "pyproject-nix"
+        ]
+      },
+      "locked": {
+        "lastModified": 1764992234,
+        "narHash": "sha256-qBbyM1Gnvs/ncbnWfbBboMyevelz+owIdSN5Sg89wzw=",
+        "owner": "pyproject-nix",
+        "repo": "uv2nix",
+        "rev": "1610e554e579c3d47b47c8a32d47042116d0e153",
+        "type": "github"
+      },
+      "original": {
+        "owner": "pyproject-nix",
+        "repo": "uv2nix",
+        "type": "github"
+      }
+    }
+  },
+  "root": "root",
+  "version": 7
+}
+</file>
+
+<file path="pytest.ini">
+[pytest]
+addopts = --ignore=idlelib
+testpaths = tests
+</file>
+
+<file path="rules/groups/frp_codegen_groups.bzl">
+load("//rules:go-schema-kcl.bzl", "frp_schema_codegen")
+
+def frp_codegen_groups():
+    targets = []
+
+    for name in [
+        "frpc",
+        "frps",
+        "tcp_proxy",
+    ]:
+        frp_schema_codegen(
+            name = "{}_kcl".format(name),
+            # later you can pass args if needed
+        )
+
+        targets.append(":{}_kcl".format(name))
+
+    return targets
+</file>
+
+<file path="rules/crd-to-cloudcoil.bzl">
+def _python_codegen_impl(ctx):
+    """
+    Implementation of the python_codegen rule.
+
+    This rule:
+      - takes CRD YAML files as inputs
+      - runs the codegen CLI exactly once
+      - produces a directory of generated Python sources
+
+    The rule is intentionally minimal and hermetic:
+      - no Python toolchain
+      - no implicit runtime deps
+      - everything happens inside a single Buck action
+    """
+
+    # Each codegen target writes to its *own* output directory.
+    # Using ctx.label.name avoids collisions when many generators exist.
+    out = ctx.actions.declare_output(ctx.label.name, dir=True)
+
+    # Executable tool (python_bootstrap_binary)
+    codegen = ctx.attrs._codegen[RunInfo]
+
+    # Ruff is only used to get its bin directory on PATH
+    ruff = ctx.attrs._ruff[RunInfo]
+
+    # Build CLI arguments for the codegen tool
+    args = cmd_args()
+    args.add(ctx.attrs.namespace)
+
+    # Add each CRD file as --input <file>
+    # Buck tracks these as action inputs automatically.
+    for f in ctx.attrs.srcs:
+        args.add("--input", f)
+
+    # Tell the generator where to write files
+    args.add("--output", out.as_output())
+
+    # Ensure deterministic output by wiping the directory
+    args.add("--clean")
+
+    # We intentionally run through bash so we can:
+    #   - prepend ruff to PATH
+    #   - avoid Buck's stricter ctx.actions.run argument rules
+    shell_cmd = cmd_args(
+        [
+            "bash",
+            "-e",   # fail fast on errors
+            "-c",
+            cmd_args(
+                [
+                    # Put ruff on PATH, then invoke the codegen binary
+                    "PATH=$(dirname ",
+                    cmd_args(ruff, format="{}"),
+                    "):$PATH;",
+                    codegen,
+                    args,
+                ],
+                delimiter=" "
+            ),
+        ]
+    )
+
+    # Register the action with Buck
+    ctx.actions.run(
+        shell_cmd,
+        category="python_codegen"
+    )
+
+    # Expose the generated directory as the rule output
+    return [DefaultInfo(default_outputs=[out])]
+
+
+# Public rule wrapper
+python_codegen = rule(
+    impl = _python_codegen_impl,
+    attrs = {
+        # Input CRD YAML files
+        "srcs": attrs.list(attrs.source(), default=[]),
+
+        # Python namespace for generated models
+        "namespace": attrs.string(),
+
+        # Codegen executable (bootstrap binary)
+        "_codegen": attrs.exec_dep(default="toolchains//:python-crd-cloudcoil"),
+
+        # Ruff binary (used only for PATH injection)
+        "_ruff": attrs.exec_dep(default="toolchains//:ruff"),
+    },
+)
+</file>
+
+<file path="tests/tests/test_basic.py">
+from generated.fluxcd_helm.fluxcd_helm.io.fluxcd.toolkit.helm.v2 import HelmRelease
+
+from src.lib.lib import test
+
+
+def test_basic(dummy):
+    print("Contents of instantiated generated helmrelease: ")
+    print(HelmRelease)
+
+    test("")
+    assert dummy == "hello from fixture"
+</file>
+
+<file path="toolchains/flake.lock">
+{
+  "nodes": {
+    "buck2-nix": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1756462063,
+        "narHash": "sha256-FIGJSsPLYmQCVU620vD6t2uVg84G2YEWQzahJO00kVY=",
+        "owner": "tweag",
+        "repo": "buck2.nix",
+        "rev": "038b031b84846101030b9d081445003e82e3be5c",
+        "type": "github"
+      },
+      "original": {
+        "owner": "tweag",
+        "repo": "buck2.nix",
+        "type": "github"
+      }
+    },
+    "flake-utils": {
+      "inputs": {
+        "systems": "systems"
+      },
+      "locked": {
+        "lastModified": 1731533236,
+        "narHash": "sha256-l0KFg5HjrsfsO/JpG+r7fRrqm12kzFHyUHqHCVpMMbI=",
+        "owner": "numtide",
+        "repo": "flake-utils",
+        "rev": "11707dc2f618dd54ca8739b309ec4fc024de578b",
+        "type": "github"
+      },
+      "original": {
+        "owner": "numtide",
+        "repo": "flake-utils",
+        "type": "github"
+      }
+    },
+    "gomod2nix": {
+      "inputs": {
+        "flake-utils": "flake-utils",
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1763982521,
+        "narHash": "sha256-ur4QIAHwgFc0vXiaxn5No/FuZicxBr2p0gmT54xZkUQ=",
+        "owner": "nix-community",
+        "repo": "gomod2nix",
+        "rev": "02e63a239d6eabd595db56852535992c898eba72",
+        "type": "github"
+      },
+      "original": {
+        "owner": "nix-community",
+        "repo": "gomod2nix",
+        "type": "github"
+      }
+    },
+    "nixpkgs": {
+      "locked": {
+        "lastModified": 1764950072,
+        "narHash": "sha256-BmPWzogsG2GsXZtlT+MTcAWeDK5hkbGRZTeZNW42fwA=",
+        "owner": "nixos",
+        "repo": "nixpkgs",
+        "rev": "f61125a668a320878494449750330ca58b78c557",
+        "type": "github"
+      },
+      "original": {
+        "owner": "nixos",
+        "ref": "nixos-unstable",
+        "repo": "nixpkgs",
+        "type": "github"
+      }
+    },
+    "pyproject-build-systems": {
+      "inputs": {
+        "nixpkgs": [
+          "nixpkgs"
+        ],
+        "pyproject-nix": [
+          "pyproject-nix"
+        ],
+        "uv2nix": [
+          "uv2nix"
+        ]
+      },
+      "locked": {
+        "lastModified": 1763662255,
+        "narHash": "sha256-4bocaOyLa3AfiS8KrWjZQYu+IAta05u3gYZzZ6zXbT0=",
+        "owner": "pyproject-nix",
+        "repo": "build-system-pkgs",
+        "rev": "042904167604c681a090c07eb6967b4dd4dae88c",
+        "type": "github"
+      },
+      "original": {
+        "owner": "pyproject-nix",
+        "repo": "build-system-pkgs",
+        "type": "github"
+      }
+    },
+    "pyproject-nix": {
+      "inputs": {
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1764134915,
+        "narHash": "sha256-xaKvtPx6YAnA3HQVp5LwyYG1MaN4LLehpQI8xEdBvBY=",
+        "owner": "pyproject-nix",
+        "repo": "pyproject.nix",
+        "rev": "2c8df1383b32e5443c921f61224b198a2282a657",
+        "type": "github"
+      },
+      "original": {
+        "owner": "pyproject-nix",
+        "repo": "pyproject.nix",
+        "type": "github"
+      }
+    },
+    "root": {
+      "inputs": {
+        "buck2-nix": "buck2-nix",
+        "gomod2nix": "gomod2nix",
+        "nixpkgs": "nixpkgs",
+        "pyproject-build-systems": "pyproject-build-systems",
+        "pyproject-nix": "pyproject-nix",
+        "uv2nix": "uv2nix"
+      }
+    },
+    "systems": {
+      "locked": {
+        "lastModified": 1681028828,
+        "narHash": "sha256-Vy1rq5AaRuLzOxct8nz4T6wlgyUR7zLU309k9mBC768=",
+        "owner": "nix-systems",
+        "repo": "default",
+        "rev": "da67096a3b9bf56a91d16901293e51ba5b49a27e",
+        "type": "github"
+      },
+      "original": {
+        "owner": "nix-systems",
+        "repo": "default",
+        "type": "github"
+      }
+    },
+    "uv2nix": {
+      "inputs": {
+        "nixpkgs": [
+          "nixpkgs"
+        ],
+        "pyproject-nix": [
+          "pyproject-nix"
+        ]
+      },
+      "locked": {
+        "lastModified": 1764992234,
+        "narHash": "sha256-qBbyM1Gnvs/ncbnWfbBboMyevelz+owIdSN5Sg89wzw=",
+        "owner": "pyproject-nix",
+        "repo": "uv2nix",
+        "rev": "1610e554e579c3d47b47c8a32d47042116d0e153",
+        "type": "github"
+      },
+      "original": {
+        "owner": "pyproject-nix",
+        "repo": "uv2nix",
+        "type": "github"
+      }
+    }
+  },
+  "root": "root",
+  "version": 7
+}
+</file>
+
+<file path="flake.nix">
+{
+  description = "Buck2 + uv2nix project";
+
+  inputs = {
+    toolchains.url = "path:./toolchains";
+  };
+
+  outputs =
+    { toolchains, ... }:
+    {
+      devShells = toolchains.outputs.devShells;
+      packages = toolchains.outputs.packages;
+    };
+}
+</file>
+
+<file path="kcl.mod">
+[package]
+name = "home"
+edition = "v0.11.2"
+version = "0.0.1"
+
+[dependencies]
+k8s = "1.32.4"
+</file>
+
+<file path="kcl.mod.lock">
+[dependencies]
+  [dependencies.k8s]
+    name = "k8s"
+    full_name = "k8s_1.32.4"
+    version = "1.32.4"
+    sum = "WrltC/mTXtdzmhBZxlvM71wJL5C/UZ/vW+bF3nFvNbM="
+    reg = "ghcr.io"
+    repo = "kcl-lang/k8s"
+    oci_tag = "1.32.4"
+</file>
+
+<file path="toolchains/gomod2nix.nix">
+{
+  nixpkgs,
+  gomod2nix,
+}:
+
+let
+  lib = nixpkgs.lib;
+  forAllSystems = lib.genAttrs lib.systems.flakeExposed;
+in
+{
+  goPackages = forAllSystems (
+    system:
+    let
+      pkgs = import nixpkgs {
+        inherit system;
+        overlays = [ gomod2nix.overlays.default ];
+      };
+    in
+    {
+      inherit (pkgs)
+        go
+        gopls
+        delve
+        gomod2nix
+        ;
+    }
+  );
+
+  buildGoBinary =
+    {
+      system,
+      pname,
+      version ? "0.1.0",
+    }:
+    let
+      pkgs = import nixpkgs {
+        inherit system;
+        overlays = [ gomod2nix.overlays.default ];
+      };
+    in
+    pkgs.buildGoApplication {
+      inherit pname version;
+      src = ./codegen_scripts/go-schema-kcl;
+      modules = ./codegen_scripts/go-schema-kcl/gomod2nix.toml;
+    };
+}
+</file>
+
+<file path="schemas/crds/BUCK">
+load("//rules/groups:crd_codegen_groups.bzl", "crd_codegen_from_tree")
+load("//rules/groups:kcl_codegen_groups.bzl", "kcl_codegen_from_tree")
+load("//rules/groups/frp_codegen_groups.bzl", "frp_codegen_groups")
+
+load("//rules:go-schema-kcl.bzl", "frp_schema_codegen")
+
+ALL_CRDS = glob(
+    [
+        "**/*.yaml",
+        "**/*.yml",
+    ],
+    exclude = [
+        "**/README.*",
+        "**/*.md",
+        "**/rbac*.yml",
+        "**/*example*",
+        "**/*whoami*",
+        "**/*gateway*",
+        "**/docker-labels*",
+        "**/file.*",
+    ],
+)
+
+
+PYTHON_GENERATORS = crd_codegen_from_tree(
+    name_prefix = "gen",
+    srcs = ALL_CRDS,
+    namespace_prefix = "generated.models",
+)
+
+KCL_GENERATORS = (
+    kcl_codegen_from_tree(srcs = ALL_CRDS)
+    + frp_codegen_groups()
+)
+
+
+filegroup(
+    name = "generated_python",
+    srcs = PYTHON_GENERATORS,
+    visibility = ["PUBLIC"],
+)
+
+filegroup(
+    name = "generated_kcl",
+    srcs = KCL_GENERATORS,
+    visibility = ["PUBLIC"],
+)
+</file>
+
+<file path="toolchains/BUCK">
+load("@nix//:flake.bzl", "flake")
+load("@nix//toolchains:python.bzl", "nix_python_bootstrap_toolchain")
+
+_TARGET_MAPPING = [
+    select({k: k for k in ["config//os:linux", "config//os:macos"]}),
+    select({k: k for k in ["config//cpu:arm64", "config//cpu:x86_64"]}),
+]
+
+flake.package(
+    name = "python",
+    binary = "python",
+    package = "default",
+    path = ".",
+    target_compatible_with = _TARGET_MAPPING,
+)
+
+nix_python_bootstrap_toolchain(
+    name = "python_bootstrap",
+    python = ":python",
+    visibility = ["PUBLIC"],
+)
+
+
+flake.package(
+    name = "ruff",
+    path = ".",
+    package = "ruff",
+    binary = "ruff",
+    visibility = ["PUBLIC"],
+)
+
+flake.package(
+    name = "kcl",
+    path = ".",
+    package = "kcl",
+    binary = "kcl",
+    visibility = ["PUBLIC"],
+)
+
+flake.package(
+    name = "go-schema-kcl",
+    path = ".",
+    package = "go-schema-kcl",
+    binary = "go-schema-kcl",
+    visibility = ["PUBLIC"],
+)
+
+flake.package(
+    name = "python-crd-cloudcoil",
+    path = ".",
+    package = "python-crd-cloudcoil",
+    binary = "python-crd-cloudcoil",
+    visibility = ["PUBLIC"],
+)
+</file>
+
+<file path=".gitignore">
+/buck-out
+/.buckconfig.local
+/.buckconfig.d
+/.envrc.private
+/.direnv
+/.pytest_cache
+__pycache__
+.ruff_cache
+
+# Ignore everything under schemas
+schemas/**
+
+# Re-allow the directory itself
+!schemas/crds
+
+# Re-allow only the BUCK file
+!schemas/crds/BUCK
+
+# tests/generated
+tests/generated
+</file>
+
+<file path="toolchains/flake.nix">
+{
+  description = "Buck2 + uv2nix project";
+
+  inputs = {
+    nixpkgs.url = "github:nixos/nixpkgs?ref=nixos-unstable";
+
+    buck2-nix = {
+      url = "github:tweag/buck2.nix";
+      flake = false;
+    };
+
+    pyproject-nix = {
+      url = "github:pyproject-nix/pyproject.nix";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
+    uv2nix = {
+      url = "github:pyproject-nix/uv2nix";
+      inputs.pyproject-nix.follows = "pyproject-nix";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
+    pyproject-build-systems = {
+      url = "github:pyproject-nix/build-system-pkgs";
+      inputs.pyproject-nix.follows = "pyproject-nix";
+      inputs.uv2nix.follows = "uv2nix";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
+    gomod2nix = {
+      url = "github:nix-community/gomod2nix";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+  };
+
+  outputs =
+    inputs@{
+      self,
+      nixpkgs,
+      buck2-nix,
+      pyproject-nix,
+      uv2nix,
+      pyproject-build-systems,
+      gomod2nix,
+      ...
+    }:
+    let
+      lib = nixpkgs.lib;
+      forAllSystems = lib.genAttrs lib.systems.flakeExposed;
+
+      uv = import ./uv2nix.nix {
+        inherit
+          nixpkgs
+          pyproject-nix
+          uv2nix
+          pyproject-build-systems
+          ;
+      };
+
+      go = import ./gomod2nix.nix {
+        inherit nixpkgs gomod2nix;
+      };
+    in
+    {
+      devShells = forAllSystems (
+        system:
+        let
+          pkgs = nixpkgs.legacyPackages.${system};
+          pythonSet = uv.pythonSets.${system}.overrideScope uv.editableOverlay;
+          virtualenv = pythonSet.mkVirtualEnv "home" uv.workspace.deps.all;
+        in
+        {
+          default = pkgs.mkShell {
+            packages = [
+              virtualenv
+              pkgs.uv
+              pkgs.buck2
+
+              # Go toolchain
+              pkgs.go
+              go.goPackages.${system}.gomod2nix
+              self.packages.${system}.go-schema-kcl
+              self.packages.${system}.python-crd-cloudcoil
+
+              pkgs.kpt
+              pkgs.kcl
+            ];
+
+            env = {
+              UV_NO_SYNC = "1";
+              UV_PYTHON = pythonSet.python.interpreter;
+              UV_PYTHON_DOWNLOADS = "never";
+            };
+
+            shellHook = ''
+              unset PYTHONPATH
+              export REPO_ROOT=$(git rev-parse --show-toplevel)
+
+              mkdir -p .buckconfig.d
+              cat > .buckconfig.d/buck2-nix.config <<'EOS'
+              [external_cell_nix]
+                git_origin = https://github.com/tweag/buck2.nix.git
+                commit_hash = ${buck2-nix.rev}
+              EOS
+
+              echo building python
+              #buck2 build root//schemas/crds:generated_python --out tests/generated
+
+              echo building kcl
+              #buck2 build root//schemas/crds:generated_kcl --out schemas/kcl
+
+              xonsh
+            '';
+          };
+        }
+      );
+
+      packages = forAllSystems (
+        system:
+        let
+          pkgs = nixpkgs.legacyPackages.${system};
+
+          pythonSet = uv.pythonSets.${system};
+          pythonSetWithEditables = pythonSet.overrideScope uv.editableOverlay;
+
+          # Recreate the SAME locked env the devShell uses
+          virtualenv = pythonSetWithEditables.mkVirtualEnv "python-crd-cloudcoil-env" uv.workspace.deps.all;
+        in
+        {
+          default = pythonSet.mkVirtualEnv "env" uv.workspace.deps.default;
+
+          go-schema-kcl = go.buildGoBinary {
+            inherit system;
+            pname = "go-schema-kcl";
+          };
+
+          python-crd-cloudcoil = pkgs.stdenv.mkDerivation {
+            pname = "python-crd-cloudcoil";
+            version = "0.1.0";
+
+            src = ./codegen_scripts/python-crd-cloudcoil;
+            dontUnpack = true;
+
+            installPhase = ''
+              mkdir -p $out/bin
+              mkdir -p $out/lib/python-crd-cloudcoil
+
+              # Copy code + templates
+              cp -r $src/* $out/lib/python-crd-cloudcoil/
+
+              # Wrapper that runs inside the uv2nix venv
+              cat > $out/bin/python-crd-cloudcoil <<EOF
+              #!${pkgs.runtimeShell}
+              exec ${virtualenv}/bin/python \
+                $out/lib/python-crd-cloudcoil/main.py "\$@"
+              EOF
+
+              chmod +x $out/bin/python-crd-cloudcoil
+            '';
+          };
+
+          ruff = pkgs.ruff;
+          kcl = pkgs.kcl;
+        }
+      );
+
+    };
+}
+</file>
+
+</files>

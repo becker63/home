@@ -6,5 +6,15 @@
 /.pytest_cache
 __pycache__
 .ruff_cache
-#generated/crds/**/*.yaml
-#tests/generated
+
+# Ignore everything under schemas
+schemas/**
+
+# Re-allow the directory itself
+!schemas/crds
+
+# Re-allow only the BUCK file
+!schemas/crds/BUCK
+
+# tests/generated
+tests/generated
