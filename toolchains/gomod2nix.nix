@@ -41,6 +41,6 @@ in
     in
     pkgs.buildGoApplication {
       inherit pname version src;
-      modules = ../src/codegen/go-schema-kcl/gomod2nix.toml;
+      modules = src + "/gomod2nix.toml";
     };
 }

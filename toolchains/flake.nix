@@ -125,7 +125,7 @@
           go-schema-kcl = go.buildGoBinary {
             inherit system;
             pname = "go-schema-kcl";
-            src = ../src/codegen/go-schema-kcl;
+            src = nixpkgs.lib.cleanSource ../src/codegen/go-schema-kcl;
           };
 
           # cloudcoil generation implicitly relies on this

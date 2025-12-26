@@ -1,5 +1,7 @@
 load("//schemas/crds:crd_codegen_groups.bzl", "crd_codegen_from_tree")
 load("//schemas/crds:kcl_codegen_groups.bzl", "kcl_codegen_from_tree")
+load("//src/codegen/go-schema-kcl:go_codegen_rule.bzl", "frp_schema_codegen")
+load("//src/codegen/go-schema-kcl:frp_codegen_groups.bzl", "frp_codegen_groups")
 
 ALL_CRDS = glob(
     [
@@ -25,9 +27,11 @@ PYTHON_GENERATORS = crd_codegen_from_tree(
     namespace_prefix = "generated.models",
 )
 
-KCL_GENERATORS = kcl_codegen_from_tree(
-    srcs = ALL_CRDS,
+KCL_GENERATORS = (
+    kcl_codegen_from_tree(srcs = ALL_CRDS)
+    + frp_codegen_groups()
 )
+
 
 filegroup(
     name = "generated_python",

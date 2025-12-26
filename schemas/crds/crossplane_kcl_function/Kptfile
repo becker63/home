@@ -15,4 +15,4 @@ upstreamLock:
     repo: https://github.com/crossplane-contrib/function-kcl
     directory: /package/input
     ref: main
-    commit: 4a1a3fbffd48567e9bd667f443791e2dccfc50d0
+    commit: e6608e98537fb2329bfd7c02fcb66ac87c5a6b3f

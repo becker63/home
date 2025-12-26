@@ -36,3 +36,11 @@ flake.package(
     binary = "kcl",
     visibility = ["PUBLIC"],
 )
+
+flake.package(
+    name = "go-schema-kcl",
+    path = ".",
+    package = "go-schema-kcl",
+    binary = "go-schema-kcl",
+    visibility = ["PUBLIC"],
+)
