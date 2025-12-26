@@ -9,4 +9,4 @@ __pycache__
 
 # Generated sources are reproducible via hermetic tooling and intentionally not checked in
 schemas/kcl
-tests/generated
+tests/generated/**
