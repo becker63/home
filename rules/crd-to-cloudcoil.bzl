@@ -81,7 +81,7 @@ python_codegen = rule(
         "namespace": attrs.string(),
 
         # Codegen executable (bootstrap binary)
-        "_codegen": attrs.exec_dep(default="//src/codegen/cloudcoil:codegen"),
+        "_codegen": attrs.exec_dep(default="toolchains//:python-crd-cloudcoil"),
 
         # Ruff binary (used only for PATH injection)
         "_ruff": attrs.exec_dep(default="toolchains//:ruff"),

@@ -29,7 +29,6 @@ in
   buildGoBinary =
     {
       system,
-      src,
       pname,
       version ? "0.1.0",
     }:
@@ -40,7 +39,8 @@ in
       };
     in
     pkgs.buildGoApplication {
-      inherit pname version src;
-      modules = src + "/gomod2nix.toml";
+      inherit pname version;
+      src = ./codegen_scripts/go-schema-kcl;
+      modules = ./codegen_scripts/go-schema-kcl/gomod2nix.toml;
     };
 }

@@ -1,0 +1,358 @@
+{
+  "$defs": {
+    "AuthClientConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "additionalScopes": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "method": {
+          "type": "string"
+        },
+        "oidc": {
+          "$ref": "#/$defs/AuthOIDCClientConfig"
+        },
+        "token": {
+          "type": "string"
+        },
+        "tokenSource": {
+          "$ref": "#/$defs/ValueSource"
+        }
+      },
+      "type": "object"
+    },
+    "AuthOIDCClientConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "additionalEndpointParams": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "type": "object"
+        },
+        "audience": {
+          "type": "string"
+        },
+        "clientID": {
+          "type": "string"
+        },
+        "clientSecret": {
+          "type": "string"
+        },
+        "insecureSkipVerify": {
+          "type": "boolean"
+        },
+        "proxyURL": {
+          "type": "string"
+        },
+        "scope": {
+          "type": "string"
+        },
+        "tokenEndpointURL": {
+          "type": "string"
+        },
+        "trustedCaFile": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "ClientConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "auth": {
+          "$ref": "#/$defs/AuthClientConfig"
+        },
+        "dnsServer": {
+          "type": "string"
+        },
+        "featureGates": {
+          "additionalProperties": {
+            "type": "boolean"
+          },
+          "type": "object"
+        },
+        "includes": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "log": {
+          "$ref": "#/$defs/LogConfig"
+        },
+        "loginFailExit": {
+          "type": "boolean"
+        },
+        "metadatas": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "type": "object"
+        },
+        "natHoleStunServer": {
+          "type": "string"
+        },
+        "proxies": {
+          "items": {},
+          "type": "array"
+        },
+        "serverAddr": {
+          "type": "string"
+        },
+        "serverPort": {
+          "type": "integer"
+        },
+        "start": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "transport": {
+          "$ref": "#/$defs/ClientTransportConfig"
+        },
+        "udpPacketSize": {
+          "type": "integer"
+        },
+        "user": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        },
+        "virtualNet": {
+          "$ref": "#/$defs/VirtualNetConfig"
+        },
+        "visitors": {
+          "items": {},
+          "type": "array"
+        },
+        "webServer": {
+          "$ref": "#/$defs/WebServerConfig"
+        }
+      },
+      "required": [
+        "version"
+      ],
+      "type": "object"
+    },
+    "ClientTransportConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "connectServerLocalIP": {
+          "type": "string"
+        },
+        "dialServerKeepalive": {
+          "type": "integer"
+        },
+        "dialServerTimeout": {
+          "type": "integer"
+        },
+        "heartbeatInterval": {
+          "type": "integer"
+        },
+        "heartbeatTimeout": {
+          "type": "integer"
+        },
+        "poolCount": {
+          "type": "integer"
+        },
+        "protocol": {
+          "type": "string"
+        },
+        "proxyURL": {
+          "type": "string"
+        },
+        "quic": {
+          "$ref": "#/$defs/QUICOptions"
+        },
+        "tcpMux": {
+          "type": "boolean"
+        },
+        "tcpMuxKeepaliveInterval": {
+          "type": "integer"
+        },
+        "tls": {
+          "$ref": "#/$defs/TLSClientConfig"
+        }
+      },
+      "type": "object"
+    },
+    "FileSource": {
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "type": "object"
+    },
+    "LogConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "disablePrintColor": {
+          "type": "boolean"
+        },
+        "level": {
+          "type": "string"
+        },
+        "maxDays": {
+          "type": "integer"
+        },
+        "to": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "maxDays"
+      ],
+      "type": "object"
+    },
+    "QUICOptions": {
+      "additionalProperties": false,
+      "properties": {
+        "keepalivePeriod": {
+          "type": "integer"
+        },
+        "maxIdleTimeout": {
+          "type": "integer"
+        },
+        "maxIncomingStreams": {
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "TLSClientConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "certFile": {
+          "type": "string"
+        },
+        "disableCustomTLSFirstByte": {
+          "type": "boolean"
+        },
+        "enable": {
+          "type": "boolean"
+        },
+        "keyFile": {
+          "type": "string"
+        },
+        "serverName": {
+          "type": "string"
+        },
+        "trustedCaFile": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "TLSConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "certFile": {
+          "type": "string"
+        },
+        "keyFile": {
+          "type": "string"
+        },
+        "serverName": {
+          "type": "string"
+        },
+        "trustedCaFile": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "TypedProxyConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "ProxyConfigurer": true,
+        "type": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "ProxyConfigurer"
+      ],
+      "type": "object"
+    },
+    "TypedVisitorConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "VisitorConfigurer": true,
+        "type": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "VisitorConfigurer"
+      ],
+      "type": "object"
+    },
+    "ValueSource": {
+      "additionalProperties": false,
+      "properties": {
+        "file": {
+          "$ref": "#/$defs/FileSource"
+        },
+        "type": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "type": "object"
+    },
+    "VirtualNetConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "address": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "WebServerConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "addr": {
+          "type": "string"
+        },
+        "assetsDir": {
+          "type": "string"
+        },
+        "password": {
+          "type": "string"
+        },
+        "port": {
+          "type": "integer"
+        },
+        "pprofEnable": {
+          "type": "boolean"
+        },
+        "tls": {
+          "$ref": "#/$defs/TLSConfig"
+        },
+        "user": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/fatedier/frp/pkg/config/v1/client-config",
+  "$ref": "#/$defs/ClientConfig",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

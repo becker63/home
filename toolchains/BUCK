@@ -44,3 +44,11 @@ flake.package(
     binary = "go-schema-kcl",
     visibility = ["PUBLIC"],
 )
+
+flake.package(
+    name = "python-crd-cloudcoil",
+    path = ".",
+    package = "python-crd-cloudcoil",
+    binary = "python-crd-cloudcoil",
+    visibility = ["PUBLIC"],
+)

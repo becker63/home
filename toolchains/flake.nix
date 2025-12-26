@@ -80,6 +80,7 @@
               pkgs.go
               go.goPackages.${system}.gomod2nix
               self.packages.${system}.go-schema-kcl
+              self.packages.${system}.python-crd-cloudcoil
 
               pkgs.kpt
               pkgs.kcl
@@ -103,10 +104,10 @@
               EOS
 
               echo building python
-              buck2 build root//schemas/crds:generated_python --out tests/generated
+              #buck2 build root//schemas/crds:generated_python --out tests/generated
 
               echo building kcl
-              buck2 build root//schemas/crds:generated_kcl --out schemas/kcl
+              #buck2 build root//schemas/crds:generated_kcl --out schemas/kcl
 
               xonsh
             '';
@@ -118,21 +119,50 @@
         system:
         let
           pkgs = nixpkgs.legacyPackages.${system};
+
+          pythonSet = uv.pythonSets.${system};
+          pythonSetWithEditables = pythonSet.overrideScope uv.editableOverlay;
+
+          # Recreate the SAME locked env the devShell uses
+          virtualenv = pythonSetWithEditables.mkVirtualEnv "python-crd-cloudcoil-env" uv.workspace.deps.all;
         in
         {
-          default = uv.pythonSets.${system}.mkVirtualEnv "env" uv.workspace.deps.default;
+          default = pythonSet.mkVirtualEnv "env" uv.workspace.deps.default;
 
           go-schema-kcl = go.buildGoBinary {
             inherit system;
             pname = "go-schema-kcl";
-            src = nixpkgs.lib.cleanSource ../src/codegen/go-schema-kcl;
           };
 
-          # cloudcoil generation implicitly relies on this
-          ruff = pkgs.ruff;
+          python-crd-cloudcoil = pkgs.stdenv.mkDerivation {
+            pname = "python-crd-cloudcoil";
+            version = "0.1.0";
 
+            src = ./codegen_scripts/python-crd-cloudcoil;
+            dontUnpack = true;
+
+            installPhase = ''
+              mkdir -p $out/bin
+              mkdir -p $out/lib/python-crd-cloudcoil
+
+              # Copy code + templates
+              cp -r $src/* $out/lib/python-crd-cloudcoil/
+
+              # Wrapper that runs inside the uv2nix venv
+              cat > $out/bin/python-crd-cloudcoil <<EOF
+              #!${pkgs.runtimeShell}
+              exec ${virtualenv}/bin/python \
+                $out/lib/python-crd-cloudcoil/main.py "\$@"
+              EOF
+
+              chmod +x $out/bin/python-crd-cloudcoil
+            '';
+          };
+
+          ruff = pkgs.ruff;
           kcl = pkgs.kcl;
         }
       );
+
     };
 }

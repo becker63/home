@@ -1,0 +1,361 @@
+{
+  "$defs": {
+    "AuthOIDCServerConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "audience": {
+          "type": "string"
+        },
+        "issuer": {
+          "type": "string"
+        },
+        "skipExpiryCheck": {
+          "type": "boolean"
+        },
+        "skipIssuerCheck": {
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
+    "AuthServerConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "additionalScopes": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "method": {
+          "type": "string"
+        },
+        "oidc": {
+          "$ref": "#/$defs/AuthOIDCServerConfig"
+        },
+        "token": {
+          "type": "string"
+        },
+        "tokenSource": {
+          "$ref": "#/$defs/ValueSource"
+        }
+      },
+      "type": "object"
+    },
+    "FileSource": {
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "type": "object"
+    },
+    "HTTPPluginOptions": {
+      "additionalProperties": false,
+      "properties": {
+        "addr": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "ops": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "path": {
+          "type": "string"
+        },
+        "tlsVerify": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "name",
+        "addr",
+        "path",
+        "ops"
+      ],
+      "type": "object"
+    },
+    "LogConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "disablePrintColor": {
+          "type": "boolean"
+        },
+        "level": {
+          "type": "string"
+        },
+        "maxDays": {
+          "type": "integer"
+        },
+        "to": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "maxDays"
+      ],
+      "type": "object"
+    },
+    "PortsRange": {
+      "additionalProperties": false,
+      "properties": {
+        "end": {
+          "type": "integer"
+        },
+        "single": {
+          "type": "integer"
+        },
+        "start": {
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "QUICOptions": {
+      "additionalProperties": false,
+      "properties": {
+        "keepalivePeriod": {
+          "type": "integer"
+        },
+        "maxIdleTimeout": {
+          "type": "integer"
+        },
+        "maxIncomingStreams": {
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "SSHTunnelGateway": {
+      "additionalProperties": false,
+      "properties": {
+        "authorizedKeysFile": {
+          "type": "string"
+        },
+        "autoGenPrivateKeyPath": {
+          "type": "string"
+        },
+        "bindPort": {
+          "type": "integer"
+        },
+        "privateKeyFile": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "ServerConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "allowPorts": {
+          "items": {
+            "$ref": "#/$defs/PortsRange"
+          },
+          "type": "array"
+        },
+        "auth": {
+          "$ref": "#/$defs/AuthServerConfig"
+        },
+        "bindAddr": {
+          "type": "string"
+        },
+        "bindPort": {
+          "type": "integer"
+        },
+        "custom404Page": {
+          "type": "string"
+        },
+        "detailedErrorsToClient": {
+          "type": "boolean"
+        },
+        "enablePrometheus": {
+          "type": "boolean"
+        },
+        "httpPlugins": {
+          "items": {
+            "$ref": "#/$defs/HTTPPluginOptions"
+          },
+          "type": "array"
+        },
+        "kcpBindPort": {
+          "type": "integer"
+        },
+        "log": {
+          "$ref": "#/$defs/LogConfig"
+        },
+        "maxPortsPerClient": {
+          "type": "integer"
+        },
+        "natholeAnalysisDataReserveHours": {
+          "type": "integer"
+        },
+        "proxyBindAddr": {
+          "type": "string"
+        },
+        "quicBindPort": {
+          "type": "integer"
+        },
+        "sshTunnelGateway": {
+          "$ref": "#/$defs/SSHTunnelGateway"
+        },
+        "subDomainHost": {
+          "type": "string"
+        },
+        "tcpmuxHTTPConnectPort": {
+          "type": "integer"
+        },
+        "tcpmuxPassthrough": {
+          "type": "boolean"
+        },
+        "transport": {
+          "$ref": "#/$defs/ServerTransportConfig"
+        },
+        "udpPacketSize": {
+          "type": "integer"
+        },
+        "userConnTimeout": {
+          "type": "integer"
+        },
+        "version": {
+          "type": "string"
+        },
+        "vhostHTTPPort": {
+          "type": "integer"
+        },
+        "vhostHTTPSPort": {
+          "type": "integer"
+        },
+        "vhostHTTPTimeout": {
+          "type": "integer"
+        },
+        "webServer": {
+          "$ref": "#/$defs/WebServerConfig"
+        }
+      },
+      "required": [
+        "version"
+      ],
+      "type": "object"
+    },
+    "ServerTransportConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "heartbeatTimeout": {
+          "type": "integer"
+        },
+        "maxPoolCount": {
+          "type": "integer"
+        },
+        "quic": {
+          "$ref": "#/$defs/QUICOptions"
+        },
+        "tcpKeepalive": {
+          "type": "integer"
+        },
+        "tcpMux": {
+          "type": "boolean"
+        },
+        "tcpMuxKeepaliveInterval": {
+          "type": "integer"
+        },
+        "tls": {
+          "$ref": "#/$defs/TLSServerConfig"
+        }
+      },
+      "type": "object"
+    },
+    "TLSConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "certFile": {
+          "type": "string"
+        },
+        "keyFile": {
+          "type": "string"
+        },
+        "serverName": {
+          "type": "string"
+        },
+        "trustedCaFile": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "TLSServerConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "certFile": {
+          "type": "string"
+        },
+        "force": {
+          "type": "boolean"
+        },
+        "keyFile": {
+          "type": "string"
+        },
+        "serverName": {
+          "type": "string"
+        },
+        "trustedCaFile": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "ValueSource": {
+      "additionalProperties": false,
+      "properties": {
+        "file": {
+          "$ref": "#/$defs/FileSource"
+        },
+        "type": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "type": "object"
+    },
+    "WebServerConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "addr": {
+          "type": "string"
+        },
+        "assetsDir": {
+          "type": "string"
+        },
+        "password": {
+          "type": "string"
+        },
+        "port": {
+          "type": "integer"
+        },
+        "pprofEnable": {
+          "type": "boolean"
+        },
+        "tls": {
+          "$ref": "#/$defs/TLSConfig"
+        },
+        "user": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/fatedier/frp/pkg/config/v1/server-config",
+  "$ref": "#/$defs/ServerConfig",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

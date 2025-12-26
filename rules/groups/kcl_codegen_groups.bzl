@@ -1,4 +1,4 @@
-load("//src/codegen/crd-to-kcl:kcl_codegen_rule.bzl", "kcl_crd_import")
+load("//rules:crd-to-kcl.bzl", "kcl_crd_import")
 
 def kcl_codegen_from_tree(
     *,

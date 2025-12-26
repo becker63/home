@@ -1,0 +1,158 @@
+{
+  "$defs": {
+    "BandwidthQuantity": {
+      "additionalProperties": false,
+      "properties": {},
+      "type": "object"
+    },
+    "HTTPHeader": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "value"
+      ],
+      "type": "object"
+    },
+    "HealthCheckConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "httpHeaders": {
+          "items": {
+            "$ref": "#/$defs/HTTPHeader"
+          },
+          "type": "array"
+        },
+        "intervalSeconds": {
+          "type": "integer"
+        },
+        "maxFailed": {
+          "type": "integer"
+        },
+        "path": {
+          "type": "string"
+        },
+        "timeoutSeconds": {
+          "type": "integer"
+        },
+        "type": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "intervalSeconds"
+      ],
+      "type": "object"
+    },
+    "LoadBalancerConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "group": {
+          "type": "string"
+        },
+        "groupKey": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "group"
+      ],
+      "type": "object"
+    },
+    "ProxyTransport": {
+      "additionalProperties": false,
+      "properties": {
+        "bandwidthLimit": {
+          "$ref": "#/$defs/BandwidthQuantity"
+        },
+        "bandwidthLimitMode": {
+          "type": "string"
+        },
+        "proxyProtocolVersion": {
+          "type": "string"
+        },
+        "useCompression": {
+          "type": "boolean"
+        },
+        "useEncryption": {
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
+    "TCPProxyConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "annotations": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "type": "object"
+        },
+        "healthCheck": {
+          "$ref": "#/$defs/HealthCheckConfig"
+        },
+        "loadBalancer": {
+          "$ref": "#/$defs/LoadBalancerConfig"
+        },
+        "localIP": {
+          "type": "string"
+        },
+        "localPort": {
+          "type": "integer"
+        },
+        "metadatas": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "type": "object"
+        },
+        "name": {
+          "type": "string"
+        },
+        "plugin": {
+          "$ref": "#/$defs/TypedClientPluginOptions"
+        },
+        "remotePort": {
+          "type": "integer"
+        },
+        "transport": {
+          "$ref": "#/$defs/ProxyTransport"
+        },
+        "type": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "type"
+      ],
+      "type": "object"
+    },
+    "TypedClientPluginOptions": {
+      "additionalProperties": false,
+      "properties": {
+        "ClientPluginOptions": true,
+        "type": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "ClientPluginOptions"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/fatedier/frp/pkg/config/v1/tcp-proxy-config",
+  "$ref": "#/$defs/TCPProxyConfig",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

@@ -1,4 +1,4 @@
-load("//src/codegen/go-schema-kcl:go_codegen_rule.bzl", "frp_schema_codegen")
+load("//rules:go-schema-kcl.bzl", "frp_schema_codegen")
 
 def frp_codegen_groups():
     targets = []
